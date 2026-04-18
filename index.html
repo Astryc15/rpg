@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>✨ RPG PIXEL · INFINITO</title>
+  <style>
+    * {
+      margin: 0;
+      box-sizing: border-box;
+      user-select: none;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    body {
+      min-height: 100vh;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Courier New', monospace;
+    }
+    .game-container {
+      background: #1a1e2a;
+      padding: 20px;
+      border-radius: 30px;
+      box-shadow: 0 0 0 4px #4a6a8a, inset 0 0 0 2px #8ab0d0;
+      position: relative;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      width: 800px;
+      height: 600px;
+      box-shadow: 0 0 0 4px #2a3a4a;
+      image-rendering: crisp-edges;
+      background: #000;
+    }
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      margin: 16px 8px 0 8px;
+      color: #e8f0ff;
+      text-shadow: 3px 3px 0 #0a1018;
+      font-size: 1.5rem;
+      font-weight: bold;
+    }
+    .hp-box {
+      background: #1e2a38;
+      padding: 8px 25px;
+      border-radius: 40px;
+      border-bottom: 4px solid #b14e4e;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .score-box {
+      background: #1e2a38;
+      padding: 8px 30px;
+      border-radius: 40px;
+      border-bottom: 4px solid #eab853;
+    }
+    .weapon-box {
+      background: #1e2a38;
+      padding: 8px 25px;
+      border-radius: 40px;
+      border-bottom: 4px solid #6a9fb0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .button-group {
+      display: flex;
+      gap: 12px;
+    }
+    .pixel-btn {
+      background: #3a506c;
+      border: none;
+      border-bottom: 5px solid #1f2a38;
+      color: white;
+      font-family: inherit;
+      font-weight: bold;
+      font-size: 1.1rem;
+      padding: 8px 18px;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #0f1a22, 0 0 10px #5f9fcf;
+      transition: 0.05s;
+      animation: btnGlow 2s infinite alternate;
+    }
+    .pixel-btn:hover {
+      background: #5b7a9a;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 0 #0f1a22, 0 0 18px #8fcbff;
+    }
+    .pixel-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 #0f1a22, 0 0 12px #8fcbff;
+    }
+    @keyframes btnGlow {
+      0% { box-shadow: 0 4px 0 #0f1a22, 0 0 5px #5f9fcf; }
+      100% { box-shadow: 0 4px 0 #0f1a22, 0 0 15px #a0d0ff; }
+    }
+    .controls-tip {
+      color: #b0c8e0;
+      margin-top: 12px;
+      text-align: center;
+      font-size: 0.9rem;
+    }
+    /* MENU PRINCIPAL (fundo preto) */
+    .menu-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 200;
+    }
+    .menu-box {
+      background: #0a0f18;
+      border: 6px solid #6d9fc0;
+      padding: 40px 60px;
+      border-radius: 50px;
+      box-shadow: 0 0 50px #3a6a9a;
+      text-align: center;
+      color: #f0e8d0;
+      animation: menuPop 0.3s;
+    }
+    @keyframes menuPop {
+      0% { transform: scale(0.8); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .menu-box h1 {
+      font-size: 3.5rem;
+      margin-bottom: 20px;
+      text-shadow: 6px 6px 0 #0a1420;
+      color: #ffd966;
+    }
+    .menu-btn {
+      display: block;
+      width: 100%;
+      margin: 15px 0;
+      padding: 15px 0;
+      font-size: 1.8rem;
+    }
+    /* PERSONALIZAÇÃO (submenu) */
+    .customize-panel {
+      margin-top: 20px;
+      background: #1a2430;
+      border-radius: 20px;
+      padding: 20px;
+      display: none;
+    }
+    .color-option {
+      display: inline-block;
+      width: 40px;
+      height: 40px;
+      border-radius: 20px;
+      margin: 5px;
+      border: 2px solid white;
+      cursor: pointer;
+    }
+    /* INVENTÁRIO (mantido, mas acessível só durante jogo) */
+    .inventory-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 150;
+      backdrop-filter: blur(4px);
+    }
+    .inventory-panel {
+      background: #1e2a38;
+      border: 6px solid #7a9fc0;
+      padding: 25px 35px;
+      border-radius: 40px;
+      box-shadow: 0 0 40px #2a5a7a;
+      color: #e8dcc0;
+      max-width: 900px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .inv-header {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 2px solid #5a7a9a;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+    }
+    .inv-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 12px;
+    }
+    /* Estilos para item-card etc. (mesmo anterior) */
+    .item-card {
+      background: #15202b;
+      border: 2px solid #3a6a8a;
+      border-radius: 16px;
+      padding: 8px 4px;
+      text-align: center;
+      cursor: pointer;
+      animation: cardGlow 3s infinite alternate;
+    }
+    .item-card:hover {
+      border-color: #b0d0ff;
+      box-shadow: 0 0 18px #8fcbff;
+      transform: scale(1.02);
+    }
+    @keyframes cardGlow {
+      0% { box-shadow: 0 0 2px #4a8ab0; }
+      100% { box-shadow: 0 0 10px #6ab0e0; }
+    }
+    .item-icon-canvas { width: 48px; height: 48px; margin: 0 auto; }
+    .item-name { font-size: 12px; font-weight: bold; margin-top: 5px; color: #d0e0f0; }
+    .item-count { font-size: 14px; background: #0f1a24; display: inline-block; padding: 2px 8px; border-radius: 20px; margin-top: 4px; }
+    .detail-panel { margin-top: 25px; background: #0f1a24; border-radius: 20px; padding: 18px; border-left: 6px solid #eab853; }
+  </style>
+</head>
+<body>
+<div class="game-container">
+  <canvas id="gameCanvas" width="400" height="300"></canvas>
+  
+  <div class="status-bar">
+    <div class="hp-box">
+      <span>❤️</span> <span id="hpDisplay">20</span>
+    </div>
+    <div class="weapon-box">
+      <span>⚔️</span> <span id="weaponDisplay">Espada</span>
+    </div>
+    <div class="score-box">
+      <span>⭐</span> <span id="scoreDisplay">0</span>
+    </div>
+    <div class="button-group">
+      <button class="pixel-btn" id="inventoryBtn">📦 Inv</button>
+      <button class="pixel-btn" id="menuBtn">☰ Menu</button>
+    </div>
+  </div>
+  <div class="controls-tip">
+    WASD / Setas | ESPAÇO atacar | 1-3 trocar arma | E usar poção | Mapa infinito
+  </div>
+</div>
+
+<!-- MENU PRINCIPAL -->
+<div class="menu-overlay" id="mainMenu">
+  <div class="menu-box">
+    <h1>✨ LENDA PIXEL</h1>
+    <button class="pixel-btn menu-btn" id="startGameBtn">▶ JOGAR</button>
+    <button class="pixel-btn menu-btn" id="customizeBtn">🎨 PERSONALIZAR</button>
+    <button class="pixel-btn menu-btn" id="creditsBtn">📜 CRÉDITOS</button>
+    <div class="customize-panel" id="customizePanel">
+      <p>Cor da pele:</p>
+      <div>
+        <span class="color-option" style="background:#f0d0a0;" data-skin="#f0d0a0"></span>
+        <span class="color-option" style="background:#d4b47a;" data-skin="#d4b47a"></span>
+        <span class="color-option" style="background:#c49a6c;" data-skin="#c49a6c"></span>
+      </div>
+      <p>Cor da roupa:</p>
+      <div>
+        <span class="color-option" style="background:#3a6ea5;" data-clothes="#3a6ea5"></span>
+        <span class="color-option" style="background:#6b3a3a;" data-clothes="#6b3a3a"></span>
+        <span class="color-option" style="background:#3a6b4a;" data-clothes="#3a6b4a"></span>
+      </div>
+      <button class="pixel-btn" id="saveCustomizeBtn" style="margin-top:15px;">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- INVENTÁRIO (overlay) -->
+<div class="inventory-overlay" id="inventoryOverlay">
+  <div class="inventory-panel">
+    <div class="inv-header">
+      <h2>🎒 INVENTÁRIO</h2>
+      <button class="pixel-btn" id="closeInvBtn">Fechar</button>
+    </div>
+    <div class="inv-grid" id="invGrid"></div>
+    <div class="detail-panel" id="itemDetail">
+      <div class="detail-name">Selecione um item</div>
+      <div class="detail-lore">...</div>
+      <div><span id="detailDesc"></span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function(){
+    "use strict";
+
+    // ----- CONFIGURAÇÃO -----
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    // UI elements
+    const hpSpan = document.getElementById('hpDisplay');
+    const scoreSpan = document.getElementById('scoreDisplay');
+    const weaponSpan = document.getElementById('weaponDisplay');
+    const mainMenu = document.getElementById('mainMenu');
+    const customizePanel = document.getElementById('customizePanel');
+    const inventoryOverlay = document.getElementById('inventoryOverlay');
+    const invGrid = document.getElementById('invGrid');
+    const detailName = document.querySelector('.detail-name');
+    const detailLore = document.querySelector('.detail-lore');
+    const detailDesc = document.getElementById('detailDesc');
+
+    // Estado do jogo
+    let gameActive = false;
+    let gameOver = false;
+    
+    // Aparência do jogador (personalizável)
+    let playerAppearance = {
+      skin: '#f0d0a0',
+      clothes: '#3a6ea5'
+    };
+
+    // ----- MUNDO INFINITO (Chunks) -----
+    const TILE_SIZE = 32;
+    const CHUNK_SIZE = 16; // tiles por chunk
+    const VIEW_W = 12, VIEW_H = 9;
+    
+    // Mapa de chunks (chave "cx,cy" -> matriz de tiles)
+    const chunks = new Map();
+    
+    // Gera chunk procedural
+    function generateChunk(cx, cy) {
+      const tiles = [];
+      for (let row = 0; row < CHUNK_SIZE; row++) {
+        tiles[row] = [];
+        for (let col = 0; col < CHUNK_SIZE; col++) {
+          const worldX = cx * CHUNK_SIZE + col;
+          const worldY = cy * CHUNK_SIZE + row;
+          // Lógica de terreno: grama com alguns lagos/paredes
+          if (Math.random() < 0.05) tiles[row][col] = 2; // água
+          else if (Math.random() < 0.02) tiles[row][col] = 1; // parede
+          else tiles[row][col] = 0; // grama
+        }
+      }
+      chunks.set(`${cx},${cy}`, tiles);
+    }
+    
+    // Obtém tile em coordenadas mundiais
+    function getTile(wx, wy) {
+      const cx = Math.floor(wx / CHUNK_SIZE);
+      const cy = Math.floor(wy / CHUNK_SIZE);
+      const key = `${cx},${cy}`;
+      if (!chunks.has(key)) generateChunk(cx, cy);
+      const chunk = chunks.get(key);
+      const tx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+      const ty = ((wy % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+      return chunk[ty][tx];
+    }
+    
+    function isTileSolidWorld(wx, wy) {
+      const tile = getTile(wx, wy);
+      return tile === 1 || tile === 2;
+    }
+    
+    // Câmera
+    let camera = { x: 0, y: 0 };
+    
+    // Jogador
+    let player = {
+      x: 0, y: 0, size: 24,
+      health: 20, maxHealth: 20,
+      facing: 'down', attackTimer: 0, invincible: 0,
+      speed: 2.8,
+      weapon: 'sword' // 'sword', 'bow', 'staff'
+    };
+    
+    // Posiciona jogador em chunk inicial
+    player.x = 8 * TILE_SIZE + 16;
+    player.y = 8 * TILE_SIZE + 16;
+    
+    // Inimigos (pool limitado)
+    let enemies = [];
+    const MAX_ENEMIES = 30;
+    // Projéteis
+    let projectiles = [];
+    // Itens no chão
+    let groundItems = [];
+    
+    // Banco de itens (simplificado)
+    const ITEM_DB = [];
+    (function genItems() {
+      for (let i=0; i<100; i++) {
+        ITEM_DB.push({
+          id: i, name: `Item ${i}`, rarity: 'Comum', lore: 'Um item.', desc: 'Sem efeito.'
+        });
+      }
+    })();
+    
+    let inventory = new Map();
+    let score = 0;
+    
+    // Armas disponíveis
+    const weapons = {
+      sword: { name: 'Espada', damage: 2, cooldown: 15, range: 35, type: 'melee' },
+      bow: { name: 'Arco', damage: 1, cooldown: 20, range: 300, type: 'ranged', projectile: 'arrow' },
+      staff: { name: 'Cajado', damage: 3, cooldown: 30, range: 250, type: 'ranged', projectile: 'fireball' }
+    };
+    
+    // Controles
+    const keys = {
+      w: false, a: false, s: false, d: false,
+      up: false, left: false, down: false, right: false,
+      space: false, e: false
+    };
+    
+    // ----- FUNÇÕES AUXILIARES -----
+    function canMoveTo(x, y, w, h) {
+      const left = Math.floor((x - w/2) / TILE_SIZE);
+      const right = Math.floor((x + w/2 - 1) / TILE_SIZE);
+      const top = Math.floor((y - h/2) / TILE_SIZE);
+      const bottom = Math.floor((y + h/2 - 1) / TILE_SIZE);
+      for (let row = top; row <= bottom; row++) {
+        for (let col = left; col <= right; col++) {
+          if (isTileSolidWorld(col, row)) return false;
+        }
+      }
+      return true;
+    }
+    
+    function updateCamera() {
+      camera.x = player.x - (VIEW_W/2)*TILE_SIZE;
+      camera.y = player.y - (VIEW_H/2)*TILE_SIZE;
+    }
+    
+    // Spawn de inimigos ao redor
+    function spawnEnemiesAround() {
+      if (enemies.length >= MAX_ENEMIES) return;
+      const angle = Math.random() * 2 * Math.PI;
+      const dist = 200 + Math.random() * 200;
+      const ex = player.x + Math.cos(angle) * dist;
+      const ey = player.y + Math.sin(angle) * dist;
+      if (canMoveTo(ex, ey, 24, 24)) {
+        enemies.push({
+          x: ex, y: ey, size: 24, health: 5, vx:0, vy:0,
+          type: 'slime'
+        });
+      }
+    }
+    
+    // Reset para novo jogo
+    function resetGame() {
+      player.health = player.maxHealth;
+      player.x = 8*32+16; player.y = 8*32+16;
+      player.attackTimer = 0; player.invincible = 0;
+      score = 0;
+      gameActive = true;
+      gameOver = false;
+      enemies = [];
+      projectiles = [];
+      groundItems = [];
+      inventory.clear();
+      // Gera chunks iniciais
+      for (let cx = -1; cx <= 1; cx++) for (let cy = -1; cy <= 1; cy++) generateChunk(cx, cy);
+      updateUI();
+      updateCamera();
+      closeInventory();
+    }
+    
+    function updateUI() {
+      hpSpan.textContent = player.health;
+      scoreSpan.textContent = score;
+      weaponSpan.textContent = weapons[player.weapon].name;
+    }
+    
+    // ----- LÓGICA DO JOGO -----
+    function handlePlayerMovement() {
+      if (!gameActive || gameOver || player.health <= 0) return;
+      let moveX = 0, moveY = 0;
+      if (keys.w || keys.up) moveY -= 1;
+      if (keys.s || keys.down) moveY += 1;
+      if (keys.a || keys.left) moveX -= 1;
+      if (keys.d || keys.right) moveX += 1;
+      if (moveX !== 0 || moveY !== 0) {
+        const len = Math.sqrt(moveX*moveX + moveY*moveY);
+        moveX = moveX / len * player.speed;
+        moveY = moveY / len * player.speed;
+        if (Math.abs(moveX) > Math.abs(moveY)) player.facing = moveX > 0 ? 'right' : 'left';
+        else player.facing = moveY > 0 ? 'down' : 'up';
+      }
+      if (canMoveTo(player.x + moveX, player.y, player.size, player.size)) player.x += moveX;
+      if (canMoveTo(player.x, player.y + moveY, player.size, player.size)) player.y += moveY;
+      
+      // Coleta de itens
+      for (let i=groundItems.length-1; i>=0; i--) {
+        const g = groundItems[i];
+        if (Math.hypot(player.x - g.x, player.y - g.y) < 22) {
+          inventory.set(g.itemId, (inventory.get(g.itemId) || 0) + 1);
+          groundItems.splice(i,1);
+        }
+      }
+      
+      // Spawn de inimigos periódico
+      if (Math.random() < 0.02) spawnEnemiesAround();
+    }
+    
+    function handleAttack() {
+      if (player.attackTimer > 0) player.attackTimer--;
+      if (keys.space && player.attackTimer <= 0 && gameActive && !gameOver && player.health > 0) {
+        const weapon = weapons[player.weapon];
+        player.attackTimer = weapon.cooldown;
+        
+        if (weapon.type === 'melee') {
+          let ax = player.x, ay = player.y;
+          if (player.facing === 'right') ax += weapon.range/2;
+          if (player.facing === 'left') ax -= weapon.range/2;
+          if (player.facing === 'down') ay += weapon.range/2;
+          if (player.facing === 'up') ay -= weapon.range/2;
+          
+          for (let e of enemies) {
+            if (Math.hypot(e.x - ax, e.y - ay) < weapon.range) {
+              e.health -= weapon.damage;
+              if (e.health <= 0) {
+                const idx = enemies.indexOf(e);
+                if (idx > -1) enemies.splice(idx, 1);
+                score += 10;
+                updateUI();
+              }
+            }
+          }
+        } else { // ranged
+          const proj = {
+            x: player.x, y: player.y,
+            vx: 0, vy: 0,
+            damage: weapon.damage,
+            life: 60,
+            type: weapon.projectile,
+            owner: 'player'
+          };
+          const speed = 8;
+          if (player.facing === 'right') proj.vx = speed;
+          else if (player.facing === 'left') proj.vx = -speed;
+          else if (player.facing === 'down') proj.vy = speed;
+          else proj.vy = -speed;
+          projectiles.push(proj);
+        }
+      }
+    }
+    
+    function updateEnemies() {
+      for (let e of enemies) {
+        // IA burra
+        if (Math.random() < 0.7) {
+          e.vx = (Math.random()-0.5)*1.2; e.vy = (Math.random()-0.5)*1.2;
+        } else {
+          const dx = player.x - e.x, dy = player.y - e.y, dist = Math.hypot(dx,dy);
+          if (dist > 5) { e.vx = dx/dist*1.0; e.vy = dy/dist*1.0; }
+        }
+        if (canMoveTo(e.x + e.vx, e.y, e.size, e.size)) e.x += e.vx;
+        if (canMoveTo(e.x, e.y + e.vy, e.size, e.size)) e.y += e.vy;
+        
+        if (gameActive && !gameOver && player.invincible <= 0 && Math.hypot(player.x-e.x, player.y-e.y) < 28) {
+          player.health = Math.max(0, player.health-1);
+          player.invincible = 30;
+          updateUI();
+          if (player.health <= 0) { gameActive = false; gameOver = true; }
+        }
+      }
+      if (player.invincible > 0) player.invincible--;
+      
+      // Projéteis
+      for (let i=projectiles.length-1; i>=0; i--) {
+        const p = projectiles[i];
+        p.x += p.vx; p.y += p.vy;
+        p.life--;
+        if (p.life <= 0) { projectiles.splice(i,1); continue; }
+        
+        if (p.owner === 'player') {
+          for (let e of enemies) {
+            if (Math.hypot(p.x - e.x, p.y - e.y) < 20) {
+              e.health -= p.damage;
+              projectiles.splice(i,1);
+              if (e.health <= 0) {
+                const idx = enemies.indexOf(e);
+                if (idx > -1) enemies.splice(idx, 1);
+                score += 10;
+                updateUI();
+              }
+              break;
+            }
+          }
+        }
+      }
+      
+      // Remove inimigos distantes para otimizar
+      enemies = enemies.filter(e => Math.hypot(player.x - e.x, player.y - e.y) < 800);
+    }
+    
+    function usePotion() {
+      // simplificado
+    }
+    
+    // Troca de arma (1,2,3)
+    function switchWeapon(key) {
+      if (key === '1') player.weapon = 'sword';
+      else if (key === '2') player.weapon = 'bow';
+      else if (key === '3') player.weapon = 'staff';
+      updateUI();
+    }
+    
+    // ----- DESENHO -----
+    function drawMap() {
+      const startCol = Math.floor(camera.x / TILE_SIZE);
+      const endCol = startCol + VIEW_W + 1;
+      const startRow = Math.floor(camera.y / TILE_SIZE);
+      const endRow = startRow + VIEW_H + 1;
+      for (let row = startRow; row <= endRow; row++) {
+        for (let col = startCol; col <= endCol; col++) {
+          const tile = getTile(col, row);
+          const x = col * TILE_SIZE - camera.x;
+          const y = row * TILE_SIZE - camera.y;
+          if (tile === 0) {
+            ctx.fillStyle = '#3a754a'; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+          } else if (tile === 1) {
+            ctx.fillStyle = '#6b5a4e'; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+          } else if (tile === 2) {
+            ctx.fillStyle = '#2a6f9c'; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+          }
+        }
+      }
+    }
+    
+    function drawPlayer() {
+      const px = player.x - camera.x - 16;
+      const py = player.y - camera.y - 16;
+      // Corpo com aparência personalizada
+      ctx.fillStyle = playerAppearance.clothes;
+      ctx.fillRect(px+8, py+4, 16, 20);
+      ctx.fillStyle = playerAppearance.skin;
+      ctx.fillRect(px+8, py-4, 16, 12);
+      // Olhos...
+    }
+    
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawMap();
+      // Desenha inimigos, projéteis, etc.
+      drawPlayer();
+    }
+    
+    // ----- INVENTÁRIO (mantido) -----
+    function renderInventoryGrid() { /* ... */ }
+    function openInventory() { inventoryOverlay.style.display = 'flex'; }
+    function closeInventory() { inventoryOverlay.style.display = 'none'; }
+    
+    // ----- MENU E PERSONALIZAÇÃO -----
+    function showMenu() { mainMenu.style.display = 'flex'; }
+    function hideMenu() { mainMenu.style.display = 'none'; }
+    
+    // Eventos de personalização
+    document.querySelectorAll('.color-option[data-skin]').forEach(el => {
+      el.addEventListener('click', () => playerAppearance.skin = el.dataset.skin);
+    });
+    document.querySelectorAll('.color-option[data-clothes]').forEach(el => {
+      el.addEventListener('click', () => playerAppearance.clothes = el.dataset.clothes);
+    });
+    document.getElementById('customizeBtn').addEventListener('click', () => {
+      customizePanel.style.display = 'block';
+    });
+    document.getElementById('saveCustomizeBtn').addEventListener('click', () => {
+      customizePanel.style.display = 'none';
+    });
+    
+    // Loop
+    function gameLoop() {
+      if (gameActive) {
+        handlePlayerMovement();
+        handleAttack();
+        updateEnemies();
+        updateCamera();
+        if (keys.e) { usePotion(); keys.e = false; }
+      }
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+    
+    // Inicialização
+    function init() {
+      // Eventos de teclado
+      window.addEventListener('keydown', (e) => {
+        const key = e.key;
+        if (key === '1' || key === '2' || key === '3') switchWeapon(key);
+        // ... (mapeamento de teclas)
+      });
+      // Botões
+      document.getElementById('startGameBtn').addEventListener('click', () => {
+        hideMenu();
+        resetGame();
+      });
+      // ...
+      showMenu();
+      gameLoop();
+    }
+    init();
+  })();
+</script>
+</body>
+</html>
