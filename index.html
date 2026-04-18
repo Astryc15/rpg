@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arcane Rogue Alpha</title>
+    <style>
+        :root { --gold: #d4af37; --bg: #050508; --red: #e63946; --panel: #1a1a2e; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; background: var(--bg); overflow: hidden; font-family: 'Courier New', monospace; color: white; user-select: none; }
+        
+        /* --- TELAS --- */
+        .screen { 
+            position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; 
+            justify-content: center; padding: 20px; text-align: center; background: var(--bg); z-index: 10;
+        }
+        .screen.active { display: flex; }
+
+        /* --- UI COMPONENTS --- */
+        .panel { background: var(--panel); border: 3px solid var(--gold); padding: 20px; border-radius: 10px; width: 100%; max-width: 400px; }
+        .btn { 
+            background: #222; border: 1px solid var(--gold); color: var(--gold); padding: 12px 25px; 
+            margin: 8px; cursor: pointer; font-size: 1rem; width: 80%; transition: 0.2s;
+        }
+        .btn:hover { background: var(--gold); color: black; }
+        
+        /* Seleção de Cores */
+        .color-row { display: flex; justify-content: center; gap: 10px; margin: 10px 0; }
+        .color-dot { width: 35px; height: 35px; border-radius: 50%; border: 2px solid white; cursor: pointer; }
+        .color-dot.selected { border-color: var(--gold); transform: scale(1.2); }
+
+        /* Grid de Classes */
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; }
+        .card { background: #0f0f1f; border: 1px solid #444; padding: 10px; border-radius: 5px; cursor: pointer; }
+        .card:hover { border-color: var(--gold); }
+
+        /* --- GAME UI --- */
+        canvas { display: block; }
+        #hud { position: absolute; top: 0; width: 100%; padding: 10px; display: flex; justify-content: space-between; pointer-events: none; z-index: 5; }
+        .bar-container { width: 120px; height: 10px; background: #222; border: 1px solid #444; }
+        .bar { height: 100%; width: 100%; transition: 0.3s; }
+        
+        /* Joystick Mobile */
+        #joystick-base { 
+            position: absolute; bottom: 40px; left: 40px; width: 100px; height: 100px; 
+            background: rgba(255,255,255,0.1); border-radius: 50%; display: none; z-index: 20;
+        }
+        #joystick-stick { 
+            position: absolute; top: 25px; left: 25px; width: 50px; height: 50px; 
+            background: var(--gold); border-radius: 50%; opacity: 0.5;
+        }
+
+        /* Dica de controle */
+        #control-hint {
+            position: absolute; bottom: 20px; right: 20px; color: #aaa; font-size: 12px;
+            background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 20px;
+            pointer-events: none; z-index: 15;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TELAS DE MENU -->
+    <div id="screen-main" class="screen active">
+        <h1 style="color:var(--gold); font-size: 3rem;">ARCANE<br>ROGUE</h1>
+        <button class="btn" onclick="showScreen('custom')">JOGAR</button>
+        <button class="btn" onclick="showScreen('credits')">CRÉDITOS</button>
+        <div id="platform-info" style="margin-top:20px; color:#666;"></div>
+    </div>
+
+    <div id="screen-credits" class="screen">
+        <div class="panel">
+            <h2 style="color:var(--gold)">CRÉDITOS</h2>
+            <p>Desenvolvido por: Astryc15</p>
+            <p>Motor: HTML5 Canvas</p>
+            <p>Arte: Procedural 32-bit</p>
+            <button class="btn" onclick="showScreen('main')">VOLTAR</button>
+        </div>
+    </div>
+
+    <div id="screen-custom" class="screen">
+        <div class="panel">
+            <h2 style="color:var(--gold)">PERSONALIZE</h2>
+            <p>Cor da Pele</p>
+            <div class="color-row" id="skin-pickers"></div>
+            <p>Cor da Roupa</p>
+            <div class="color-row" id="cloth-pickers"></div>
+            <div id="preview-box" style="height: 100px; display:flex; align-items:center; justify-content:center;">
+                <canvas id="preview-canvas" width="80" height="80" style="background:#1a1a2e; border-radius:10px;"></canvas>
+            </div>
+            <button class="btn" onclick="showScreen('class')">CONTINUAR</button>
+            <button class="btn" onclick="showScreen('main')">VOLTAR</button>
+        </div>
+    </div>
+
+    <div id="screen-class" class="screen">
+        <h2 style="color:var(--gold)">ESCOLHA SUA CLASSE</h2>
+        <div class="grid" id="class-grid"></div>
+        <button class="btn" style="margin-top:20px;" onclick="showScreen('custom')">VOLTAR</button>
+    </div>
+
+    <div id="screen-tarot" class="screen" style="background: rgba(0,0,0,0.9);">
+        <h2 style="color:var(--gold)">O DESTINO CHAMA</h2>
+        <p>Escolha uma bênção:</p>
+        <div id="tarot-options" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;"></div>
+    </div>
+
+    <!-- HUD DO JOGO -->
+    <div id="hud" style="display:none">
+        <div><div class="bar-container"><div id="hp-bar" class="bar" style="background:var(--red)"></div></div></div>
+        <div style="color:var(--gold); font-weight:bold" id="lvl-info">LV 1</div>
+        <div><div class="bar-container"><div id="xp-bar" class="bar" style="background:#4af; width:0%"></div></div></div>
+    </div>
+
+    <!-- CONTROLES VIRTUAIS -->
+    <div id="joystick-base"><div id="joystick-stick"></div></div>
+    <div id="control-hint"></div>
+
+    <!-- CANVAS PRINCIPAL -->
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    (function(){
+        "use strict";
+
+        // ========== DETECÇÃO DE PLATAFORMA ==========
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                         || ('ontouchstart' in window && window.innerWidth <= 800);
+        const platformName = isMobile ? 'Mobile' : 'Desktop';
+        
+        // Exibe informação no menu principal
+        document.getElementById('platform-info').innerText = `Plataforma detectada: ${platformName}`;
+        
+        // ========== CONFIGURAÇÃO DO CANVAS ==========
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // ========== DADOS DO JOGO ==========
+        const COLORS = {
+            skin: ['#ffdbac', '#f1c27d', '#8d5524', '#c58c85'],
+            cloth: ['#4a1d96', '#2d86b3', '#b32d2d', '#2db359', '#e67e22']
+        };
+
+        const CLASSES = [
+            { name: 'Guerreiro', ico: '⚔️', d: 40, type: 'swing', col: '#bdc3c7' },
+            { name: 'Mago', ico: '🔮', d: 25, type: 'bolt', col: '#3498db' },
+            { name: 'Assassino', ico: '🗡️', d: 15, type: 'multi', col: '#e74c3c' },
+            { name: 'Druida', ico: '🌿', d: 20, type: 'orbit', col: '#2ecc71' }
+        ];
+
+        const TAROT = [
+            { n: 'O Sol', d: '+50 HP', run: () => { player.maxHp += 50; player.hp = player.maxHp; } },
+            { n: 'O Mago', d: '+20% Dano', run: () => player.dmgMult += 0.2 },
+            { n: 'A Lua', d: '+15% Vel', run: () => player.speed += 0.5 }
+        ];
+
+        // ========== ESTADO GLOBAL ==========
+        let state = 'main'; // 'main', 'credits', 'custom', 'class', 'tarot', 'playing'
+        
+        const player = {
+            x: canvas.width/2, y: canvas.height/2,
+            hp: 100, maxHp: 100, xp: 0, nextLvl: 100, lvl: 1,
+            skin: COLORS.skin[0], cloth: COLORS.cloth[0],
+            weapon: null, speed: 3.5, dmgMult: 1,
+            input: { x: 0, y: 0 }
+        };
+
+        let enemies = [];
+        let projectiles = [];
+        let orbits = [];
+
+        // ========== FUNÇÕES DE TELA ==========
+        window.showScreen = function(id) {
+            // Oculta todas as telas
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            
+            if (id === 'game') {
+                // Modo jogo: não há tela 'screen-game', apenas escondemos todas e ativamos o HUD
+                state = 'playing';
+                document.getElementById('hud').style.display = 'flex';
+                // Mostra joystick apenas em mobile
+                if (isMobile) {
+                    document.getElementById('joystick-base').style.display = 'block';
+                    document.getElementById('control-hint').innerText = 'Toque na tela para atacar';
+                } else {
+                    document.getElementById('control-hint').innerHTML = 'WASD: Mover | Clique: Atacar';
+                }
+                document.getElementById('control-hint').style.display = 'block';
+            } else {
+                // Esconde HUD e controles quando estiver em menus
+                document.getElementById('hud').style.display = 'none';
+                document.getElementById('joystick-base').style.display = 'none';
+                document.getElementById('control-hint').style.display = 'none';
+                
+                const targetScreen = document.getElementById(`screen-${id}`);
+                if (targetScreen) {
+                    targetScreen.classList.add('active');
+                } else {
+                    console.error(`Tela 'screen-${id}' não encontrada`);
+                }
+                state = id;
+            }
+
+            // Ações específicas ao entrar em telas
+            if (id === 'custom') renderCustom();
+            if (id === 'class') renderClasses();
+            if (id === 'tarot') renderTarot();
+            if (id === 'main') {
+                // Reset básico ao voltar ao menu
+                enemies = [];
+                projectiles = [];
+                orbits = [];
+            }
+        };
+
+        // ========== RENDERIZAÇÃO DAS TELAS ==========
+        function renderCustom() {
+            const sContainer = document.getElementById('skin-pickers');
+            const cContainer = document.getElementById('cloth-pickers');
+            sContainer.innerHTML = ''; 
+            cContainer.innerHTML = '';
+
+            COLORS.skin.forEach(c => {
+                const d = document.createElement('div');
+                d.className = 'color-dot'; 
+                d.style.background = c;
+                d.onclick = () => { player.skin = c; renderCustom(); };
+                if(player.skin === c) d.classList.add('selected');
+                sContainer.appendChild(d);
+            });
+
+            COLORS.cloth.forEach(c => {
+                const d = document.createElement('div');
+                d.className = 'color-dot'; 
+                d.style.background = c;
+                d.onclick = () => { player.cloth = c; renderCustom(); };
+                if(player.cloth === c) d.classList.add('selected');
+                cContainer.appendChild(d);
+            });
+
+            // Preview no canvas
+            const previewCanvas = document.getElementById('preview-canvas');
+            const pCtx = previewCanvas.getContext('2d');
+            pCtx.clearRect(0, 0, 80, 80);
+            drawSpriteStatic(pCtx, 40, 50, player);
+        }
+
+        function drawSpriteStatic(ctx, x, y, p) {
+            ctx.save();
+            ctx.translate(x, y);
+            // Sombra
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath(); 
+            ctx.ellipse(0, 5, 12, 5, 0, 0, 7); 
+            ctx.fill();
+            // Corpo
+            ctx.fillStyle = p.cloth;
+            ctx.fillRect(-8, -22, 16, 20);
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            ctx.fillRect(2, -22, 6, 20);
+            // Cabeça
+            ctx.fillStyle = p.skin;
+            ctx.fillRect(-6, -32, 12, 10);
+            // Olhos
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-3, -28, 2, 2);
+            ctx.fillRect(1, -28, 2, 2);
+            ctx.restore();
+        }
+
+        function renderClasses() {
+            const grid = document.getElementById('class-grid');
+            grid.innerHTML = '';
+            CLASSES.forEach(c => {
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.innerHTML = `<div style="font-size:24px">${c.ico}</div><b>${c.name}</b>`;
+                div.onclick = () => { 
+                    player.weapon = c; 
+                    // Resetar posição do jogador
+                    player.x = canvas.width/2;
+                    player.y = canvas.height/2;
+                    player.hp = player.maxHp;
+                    player.xp = 0;
+                    player.lvl = 1;
+                    player.nextLvl = 100;
+                    player.dmgMult = 1;
+                    player.speed = 3.5;
+                    enemies = [];
+                    projectiles = [];
+                    orbits = [];
+                    
+                    if(c.type === 'orbit') {
+                        for(let i=0; i<3; i++) orbits.push({ a: (Math.PI*2/3)*i, d: 60 });
+                    }
+                    
+                    showScreen('game'); 
+                };
+                grid.appendChild(div);
+            });
+        }
+
+        function renderTarot() {
+            const opt = document.getElementById('tarot-options');
+            opt.innerHTML = '';
+            TAROT.forEach(t => {
+                const d = document.createElement('div');
+                d.className = 'card'; 
+                d.style.width = '120px';
+                d.style.padding = '15px';
+                d.innerHTML = `<b>${t.n}</b><br><small>${t.d}</small>`;
+                d.onclick = () => { 
+                    t.run(); 
+                    showScreen('game'); 
+                };
+                opt.appendChild(d);
+            });
+        }
+
+        // ========== LEVEL UP ==========
+        function levelUp() {
+            state = 'tarot';
+            showScreen('tarot');
+        }
+
+        // ========== LÓGICA DO JOGO ==========
+        function update() {
+            if (state !== 'playing') return;
+
+            // Movimento
+            player.x += player.input.x * player.speed;
+            player.y += player.input.y * player.speed;
+            // Limites da tela
+            player.x = Math.max(20, Math.min(canvas.width - 20, player.x));
+            player.y = Math.max(40, Math.min(canvas.height - 20, player.y));
+
+            // Spawn de inimigos
+            if (Math.random() < 0.02) {
+                const a = Math.random() * Math.PI * 2;
+                const dist = 400;
+                enemies.push({ 
+                    x: player.x + Math.cos(a) * dist, 
+                    y: player.y + Math.sin(a) * dist, 
+                    hp: 50,
+                    speed: 1.2
+                });
+            }
+
+            // Atualizar inimigos
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const en = enemies[i];
+                const dx = player.x - en.x;
+                const dy = player.y - en.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist > 1) {
+                    en.x += (dx / dist) * en.speed;
+                    en.y += (dy / dist) * en.speed;
+                }
+                
+                // Dano por contato
+                if (dist < 25) {
+                    player.hp -= 0.8;
+                    if (player.hp <= 0) {
+                        alert('Game Over!');
+                        showScreen('main');
+                        return;
+                    }
+                }
+
+                // Morte do inimigo
+                if (en.hp <= 0) {
+                    enemies.splice(i, 1);
+                    player.xp += 34;
+                    if (player.xp >= player.nextLvl) {
+                        player.lvl++;
+                        player.xp = 0;
+                        player.nextLvl = Math.floor(player.nextLvl * 1.3);
+                        levelUp();
+                        // Interrompe o update para não processar mais inimigos neste frame (evita bugs)
+                        break;
+                    }
+                }
+            }
+
+            // Projéteis
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                
+                let hit = false;
+                for (let en of enemies) {
+                    const dx = en.x - p.x;
+                    const dy = en.y - p.y;
+                    if (Math.sqrt(dx*dx + dy*dy) < 25) {
+                        en.hp -= p.dmg * player.dmgMult;
+                        hit = true;
+                        break;
+                    }
+                }
+                
+                if (hit || p.life <= 0 || p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                    projectiles.splice(i, 1);
+                }
+            }
+
+            // Órbitas (Druida)
+            if (player.weapon && player.weapon.type === 'orbit') {
+                for (let o of orbits) {
+                    o.a += 0.05;
+                    const ox = player.x + Math.cos(o.a) * o.d;
+                    const oy = player.y + Math.sin(o.a) * o.d;
+                    for (let en of enemies) {
+                        const dx = en.x - ox;
+                        const dy = en.y - oy;
+                        if (Math.sqrt(dx*dx + dy*dy) < 30) {
+                            en.hp -= 0.7 * player.dmgMult;
+                        }
+                    }
+                }
+            }
+
+            // Atualizar HUD
+            const hpPercent = (player.hp / player.maxHp) * 100;
+            document.getElementById('hp-bar').style.width = Math.max(0, hpPercent) + '%';
+            const xpPercent = (player.xp / player.nextLvl) * 100;
+            document.getElementById('xp-bar').style.width = xpPercent + '%';
+            document.getElementById('lvl-info').innerText = `LV ${player.lvl}`;
+            
+            if (player.hp <= 0) {
+                alert('Você morreu!');
+                showScreen('main');
+            }
+        }
+
+        // ========== RENDERIZAÇÃO ==========
+        function drawSprite(x, y, p) {
+            ctx.save();
+            ctx.translate(x, y);
+            const bob = Math.sin(Date.now() / 200) * 3;
+            
+            // Sombra
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath(); 
+            ctx.ellipse(0, 5, 12, 5, 0, 0, 7); 
+            ctx.fill();
+
+            // Corpo
+            ctx.fillStyle = p.cloth;
+            ctx.fillRect(-8, -22 + bob, 16, 20);
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            ctx.fillRect(2, -22 + bob, 6, 20);
+
+            // Cabeça
+            ctx.fillStyle = p.skin;
+            ctx.fillRect(-6, -32 + bob, 12, 10);
+            
+            // Olhos
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-3, -28 + bob, 2, 2);
+            ctx.fillRect(1, -28 + bob, 2, 2);
+            
+            ctx.restore();
+        }
+
+        function draw() {
+            ctx.fillStyle = '#050508';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if (state === 'playing') {
+                // Desenhar inimigos e jogador ordenados por Y (profundidade)
+                const entities = [...enemies.map(e => ({ ...e, type: 'enemy' })), { ...player, type: 'player' }];
+                entities.sort((a, b) => (a.y + (a.type==='player'?0:0)) - (b.y + (b.type==='player'?0:0)));
+                
+                for (let e of entities) {
+                    if (e.type === 'player') {
+                        drawSprite(e.x, e.y, player);
+                    } else {
+                        drawSprite(e.x, e.y, { skin: '#444', cloth: '#222' });
+                        // Barra de vida do inimigo
+                        ctx.fillStyle = '#e63946';
+                        ctx.fillRect(e.x-15, e.y-35, 30 * (e.hp/50), 4);
+                    }
+                }
+
+                // Projéteis
+                for (let p of projectiles) {
+                    ctx.fillStyle = player.weapon ? player.weapon.col : '#fff';
+                    ctx.beginPath(); 
+                    ctx.arc(p.x, p.y, 6, 0, Math.PI*2); 
+                    ctx.fill();
+                }
+
+                // Órbitas
+                if (player.weapon && player.weapon.type === 'orbit') {
+                    ctx.fillStyle = '#2ecc71';
+                    for (let o of orbits) {
+                        ctx.beginPath(); 
+                        ctx.arc(player.x + Math.cos(o.a)*o.d, player.y + Math.sin(o.a)*o.d, 6, 0, Math.PI*2); 
+                        ctx.fill();
+                    }
+                }
+            }
+            
+            update();
+            requestAnimationFrame(draw);
+        }
+
+        // ========== CONTROLES ==========
+        const keys = {};
+        window.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            updateInput();
+            // Prevenir scroll com setas
+            if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) {
+                e.preventDefault();
+            }
+        });
+        window.addEventListener('keyup', e => {
+            keys[e.key.toLowerCase()] = false;
+            updateInput();
+        });
+
+        function updateInput() {
+            player.input.x = (keys['d'] || keys['arrowright'] ? 1 : 0) - (keys['a'] || keys['arrowleft'] ? 1 : 0);
+            player.input.y = (keys['s'] || keys['arrowdown'] ? 1 : 0) - (keys['w'] || keys['arrowup'] ? 1 : 0);
+        }
+
+        // Joystick virtual (mobile)
+        const jBase = document.getElementById('joystick-base');
+        const jStick = document.getElementById('joystick-stick');
+        
+        function handleJoystickMove(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = jBase.getBoundingClientRect();
+            const centerX = rect.left + rect.width/2;
+            const centerY = rect.top + rect.height/2;
+            
+            let jx = touch.clientX - centerX;
+            let jy = touch.clientY - centerY;
+            const dist = Math.min(Math.sqrt(jx*jx + jy*jy), 40);
+            const angle = Math.atan2(jy, jx);
+            
+            const sx = Math.cos(angle) * dist;
+            const sy = Math.sin(angle) * dist;
+            jStick.style.transform = `translate(${sx}px, ${sy}px)`;
+            
+            player.input.x = sx / 40;
+            player.input.y = sy / 40;
+        }
+        
+        function handleJoystickEnd(e) {
+            e.preventDefault();
+            jStick.style.transform = `translate(0,0)`;
+            player.input.x = 0;
+            player.input.y = 0;
+        }
+        
+        if (isMobile) {
+            jBase.addEventListener('touchstart', handleJoystickMove);
+            jBase.addEventListener('touchmove', handleJoystickMove);
+            jBase.addEventListener('touchend', handleJoystickEnd);
+            jBase.addEventListener('touchcancel', handleJoystickEnd);
+        }
+
+        // Ataque (mouse e toque)
+        function handleAttack(e) {
+            if (state !== 'playing') return;
+            e.preventDefault();
+            
+            let clientX, clientY;
+            if (e.touches) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            const angle = Math.atan2(clientY - player.y, clientX - player.x);
+            const w = player.weapon;
+            if (!w) return;
+            
+            if (w.type === 'bolt') {
+                projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*8, vy: Math.sin(angle)*8, life: 60, dmg: w.d });
+            } else if (w.type === 'multi') {
+                for(let i = -0.2; i <= 0.2; i += 0.2) {
+                    projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle+i)*10, vy: Math.sin(angle+i)*10, life: 35, dmg: w.d });
+                }
+            } else if (w.type === 'swing') {
+                projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*4, vy: Math.sin(angle)*4, life: 10, dmg: w.d });
+            }
+            // Orbit não tem ataque ativo, já causa dano passivo
+        }
+
+        canvas.addEventListener('mousedown', handleAttack);
+        canvas.addEventListener('touchstart', handleAttack, {passive: false});
+        
+        // Prevenir menu de contexto no canvas
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+        // Iniciar loop de desenho
+        draw();
+        
+        // Exibir dica de controle inicial
+        if (!isMobile) {
+            document.getElementById('control-hint').innerHTML = 'WASD: Mover | Clique: Atacar';
+        } else {
+            document.getElementById('control-hint').innerText = 'Toque na tela para atacar';
+        }
+        
+        // Ajustar preview inicial
+        renderCustom();
+    })();
+</script>
+</body>
+</html>
