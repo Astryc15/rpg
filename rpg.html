@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Arcane Rogue Alpha - Tarot System</title>
+    <style>
+        :root { --gold: #c0a060; --bg: #050508; --purple: #4a1d96; }
+        body { margin: 0; background: var(--bg); overflow: hidden; font-family: 'Georgia', serif; color: white; user-select: none; }
+        canvas { display: block; image-rendering: pixelated; }
+
+        /* --- TAROT OVERLAY --- */
+        #tarot-screen { 
+            position: absolute; inset: 0; background: rgba(0,0,0,0.95); 
+            display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 200; 
+        }
+        .cards-container { display: flex; gap: 30px; margin-top: 40px; }
+        .tarot-card { 
+            width: 160px; height: 260px; background: #1a1a2e; border: 2px solid var(--gold);
+            border-radius: 10px; cursor: pointer; transition: 0.3s; position: relative;
+            padding: 15px; text-align: center; display: flex; flex-direction: column; justify-content: space-between;
+        }
+        .tarot-card:hover { transform: translateY(-15px) scale(1.05); box-shadow: 0 0 30px var(--gold); background: #252545; }
+        .tarot-card h3 { color: var(--gold); font-size: 1.1rem; margin: 10px 0; text-transform: uppercase; letter-spacing: 2px; }
+        .tarot-card p { font-size: 0.8rem; color: #ccc; line-height: 1.4; }
+        .tarot-card .card-icon { font-size: 3rem; margin: 15px 0; }
+
+        /* --- MENUS --- */
+        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); z-index: 100; }
+        .menu-card { background: #0f0f15; border: 1px solid var(--gold); padding: 40px; border-radius: 5px; text-align: center; }
+        .class-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 25px; }
+        .class-btn { background: #1a1a1a; border: 1px solid #333; color: #eee; padding: 15px; cursor: pointer; border-radius: 4px; }
+        .class-btn:hover { border-color: var(--gold); background: #222; }
+
+        /* --- HUD --- */
+        #bottom-bar { 
+            position: absolute; bottom: 0; width: 100%; height: 80px; 
+            background: #000; border-top: 2px solid var(--gold); display: flex; 
+            align-items: center; justify-content: space-around; padding: 0 20px; box-sizing: border-box;
+        }
+        .stat-box { display: flex; flex-direction: column; width: 140px; }
+        .label { font-size: 9px; color: var(--gold); letter-spacing: 1px; }
+        .bar-bg { width: 100%; height: 6px; background: #222; margin-top: 5px; border-radius: 3px; overflow: hidden; }
+        #hp-bar { background: #b32d2d; width: 100%; height: 100%; transition: 0.4s; }
+        #xp-bar { background: #2d86b3; width: 0%; height: 100%; transition: 0.4s; }
+        
+        #version { position: absolute; top: 10px; right: 10px; font-size: 10px; color: #444; }
+    </style>
+</head>
+<body>
+
+    <div id="version">v0.0.2 alpha</div>
+
+    <div id="main-menu" class="overlay">
+        <div class="menu-card">
+            <h1 style="color:var(--gold); margin:0;">ARCANE ROGUE</h1>
+            <p style="font-size: 0.8rem; color: #666;">ESCOLHA SUA LINHAGEM ARCANO</p>
+            <div class="class-grid" id="class-grid"></div>
+        </div>
+    </div>
+
+    <div id="tarot-screen">
+        <h2 style="color:var(--gold); letter-spacing: 5px;">ASCENSÃO DE TAROT</h2>
+        <div class="cards-container" id="cards-container"></div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="bottom-bar">
+        <div class="stat-box">
+            <span class="label">ESSÊNCIA VITAL</span>
+            <span id="hp-txt" style="font-size: 12px;">100/100</span>
+            <div class="bar-bg"><div id="hp-bar"></div></div>
+        </div>
+        <div class="stat-box">
+            <span class="label">CONHECIMENTO (LVL <span id="lvl-txt">1</span>)</span>
+            <span id="xp-txt" style="font-size: 12px;">0/100</span>
+            <div class="bar-bg"><div id="xp-bar"></div></div>
+        </div>
+        <div class="stat-box">
+            <span class="label">ARMA</span>
+            <span id="weapon-txt" style="color:var(--gold); font-size: 11px;">-</span>
+        </div>
+        <div class="stat-box">
+            <span class="label">DESTINO</span>
+            <span id="wave-txt" style="font-size: 11px;">WAVE 1</span>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight - 80;
+
+// --- DADOS DE BALANCEAMENTO ---
+const DATA = {
+    classes: [
+        { id: 'vanguard', name: 'Vanguarda', weapon: 'Espada', dmg: 25, range: 90, type: 'swing', icon: '⚔️' },
+        { id: 'lancer', name: 'Lanceiro', weapon: 'Lança', dmg: 35, range: 160, type: 'pierce', icon: '🔱' },
+        { id: 'mage', name: 'Erudito', weapon: 'Grimório', dmg: 20, speed: 7, type: 'bolt', icon: '📖' },
+        { id: 'ninja', name: 'Shinobi', weapon: 'Selos', dmg: 60, type: 'burst', icon: '🖐️' },
+        { id: 'summoner', name: 'Invocador', weapon: 'Espíritos', dmg: 15, type: 'orbit', icon: '🔮' },
+        { id: 'assassin', name: 'Assassino', weapon: 'Adagas', dmg: 12, speed: 12, type: 'multi', icon: '🗡️' }
+    ],
+    enemies: {
+        grunt:  { hp: 40, spd: 1.6, size: 22, color: '#555', xp: 25 },
+        brute:  { hp: 150, spd: 0.9, size: 38, color: '#822', xp: 60 },
+        stalker:{ hp: 20, spd: 3.2, size: 16, color: '#222', xp: 40 }
+    },
+    tarotPool: [
+        { title: "O Louco", icon: "🃏", desc: "Aumenta sua velocidade de movimento em 15%.", effect: () => player.speed += 0.6 },
+        { title: "O Mago", icon: "🪄", desc: "Aumenta o dano de todas as armas em 20%.", effect: () => player.dmgMult += 0.2 },
+        { title: "A Imperatriz", icon: "👑", desc: "Cura 40% da sua vida máxima imediatamente.", effect: () => player.hp = Math.min(player.maxHp, player.hp + player.maxHp*0.4) },
+        { title: "O Hierofante", icon: "📜", desc: "Ganhe 25% a mais de XP de todos os inimigos.", effect: () => player.xpMult += 0.25 },
+        { title: "A Roda", icon: "🎡", desc: "Aumenta o tamanho dos seus ataques em 30%.", effect: () => player.sizeMult += 0.3 },
+        { title: "A Morte", icon: "💀", desc: "Inimigos têm 10% menos vida ao spawnar.", effect: () => player.enemyHealthMult -= 0.1 },
+        { title: "O Sol", icon: "☀️", desc: "Sua vida máxima aumenta em 50 pontos.", effect: () => { player.maxHp += 50; player.hp += 50; } }
+    ]
+};
+
+// --- ESTADO DO JOGO ---
+let state = 'menu';
+const keys = {};
+const player = {
+    x: canvas.width/2, y: canvas.height/2,
+    hp: 100, maxHp: 100, xp: 0, nextLvl: 100, lvl: 1,
+    speed: 3.8, dmgMult: 1, xpMult: 1, sizeMult: 1, enemyHealthMult: 1,
+    weapon: null, kills: 0, wave: 1
+};
+
+let enemies = [];
+let projectiles = [];
+let particles = [];
+let orbits = [];
+
+// --- INICIALIZAÇÃO ---
+function init() {
+    const grid = document.getElementById('class-grid');
+    DATA.classes.forEach(c => {
+        const btn = document.createElement('button');
+        btn.className = 'class-btn';
+        btn.innerHTML = `<div style="font-size:20px">${c.icon}</div><b>${c.name}</b><br><small>${c.weapon}</small>`;
+        btn.onclick = () => selectClass(c);
+        grid.appendChild(btn);
+    });
+}
+
+function selectClass(config) {
+    player.weapon = config;
+    document.getElementById('weapon-txt').innerText = config.weapon.toUpperCase();
+    document.getElementById('main-menu').style.display = 'none';
+    state = 'playing';
+    if(config.type === 'orbit') {
+        for(let i=0; i<3; i++) orbits.push({ a: (Math.PI*2/3)*i, d: 60 });
+    }
+}
+
+// --- SISTEMA DE NÍVEL (TAROT) ---
+function levelUp() {
+    state = 'levelup';
+    const container = document.getElementById('cards-container');
+    container.innerHTML = '';
+    document.getElementById('tarot-screen').style.display = 'flex';
+
+    // Selecionar 3 cartas aleatórias
+    const shuffled = [...DATA.tarotPool].sort(() => 0.5 - Math.random());
+    shuffled.slice(0, 3).forEach(card => {
+        const div = document.createElement('div');
+        div.className = 'tarot-card';
+        div.innerHTML = `
+            <div>
+                <h3>${card.title}</h3>
+                <div class="card-icon">${card.icon}</div>
+                <p>${card.desc}</p>
+            </div>
+            <small style="color:var(--gold)">ESCOLHER</small>
+        `;
+        div.onclick = () => {
+            card.effect();
+            document.getElementById('tarot-screen').style.display = 'none';
+            state = 'playing';
+        };
+        container.appendChild(div);
+    });
+}
+
+// --- MECÂNICA DE COMBATE ---
+canvas.addEventListener('mousedown', (e) => {
+    if(state !== 'playing') return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const angle = Math.atan2(my - player.y, mx - player.x);
+    
+    const w = player.weapon;
+    const finalDmg = w.dmg * player.dmgMult;
+
+    if(w.type === 'bolt') {
+        projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*w.speed, vy: Math.sin(angle)*w.speed, life: 60, dmg: finalDmg, s: 8 * player.sizeMult, c: '#4af' });
+    } else if(w.type === 'multi') {
+        for(let i=-0.2; i<=0.2; i+=0.2) 
+            projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle+i)*w.speed, vy: Math.sin(angle+i)*w.speed, life: 35, dmg: finalDmg, s: 5 * player.sizeMult, c: '#f44' });
+    } else if(w.type === 'swing' || w.type === 'pierce') {
+        projectiles.push({ x: player.x, y: player.y, vx: Math.cos(angle)*2, vy: Math.sin(angle)*2, life: 8, dmg: finalDmg, s: w.range * player.sizeMult, c: '#fff', meele: true });
+    } else if(w.type === 'burst') {
+        createExplosion(mx, my, finalDmg);
+    }
+});
+
+function createExplosion(x, y, dmg) {
+    particles.push({ x, y, r: 0, maxR: 70 * player.sizeMult, life: 15, c: '#a4f' });
+    enemies.forEach((en, i) => {
+        const d = Math.sqrt((en.x-x)**2 + (en.y-y)**2);
+        if(d < 75 * player.sizeMult) hitEnemy(i, dmg);
+    });
+}
+
+function spawnEnemy() {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 600;
+    const keys = Object.keys(DATA.enemies);
+    const type = DATA.enemies[keys[Math.floor(Math.random()*keys.length)]];
+    
+    // Balanceamento: Inimigos escalam com a Wave
+    const waveMult = 1 + (player.wave - 1) * 0.25;
+    
+    enemies.push({
+        x: player.x + Math.cos(angle)*dist,
+        y: player.y + Math.sin(angle)*dist,
+        ...type,
+        hp: type.hp * waveMult * player.enemyHealthMult,
+        maxHp: type.hp * waveMult * player.enemyHealthMult,
+        spd: type.spd * (1 + player.wave * 0.05)
+    });
+}
+
+function hitEnemy(idx, dmg) {
+    const en = enemies[idx];
+    en.hp -= dmg;
+    if(en.hp <= 0) {
+        player.xp += en.xp * player.xpMult;
+        player.kills++;
+        if(player.kills % 15 === 0) player.wave++;
+        enemies.splice(idx, 1);
+        if(player.xp >= player.nextLvl) {
+            player.lvl++;
+            player.xp = 0;
+            player.nextLvl *= 1.4;
+            levelUp();
+        }
+    }
+}
+
+// --- LOOPS ---
+function update() {
+    if(state !== 'playing') return;
+
+    // Movimento com correção diagonal
+    let dx = 0, dy = 0;
+    if(keys['w']) dy--; if(keys['s']) dy++;
+    if(keys['a']) dx--; if(keys['d']) dx++;
+    if(dx !== 0 || dy !== 0) {
+        const angle = Math.atan2(dy, dx);
+        player.x += Math.cos(angle) * player.speed;
+        player.y += Math.sin(angle) * player.speed;
+    }
+
+    if(Math.random() < 0.02 + (player.wave * 0.005)) spawnEnemy();
+
+    // Lógica Orbits (Invocador)
+    orbits.forEach(o => {
+        o.a += 0.04;
+        const ox = player.x + Math.cos(o.a) * o.d;
+        const oy = player.y + Math.sin(o.a) * o.d;
+        enemies.forEach((en, i) => {
+            if(Math.sqrt((en.x-ox)**2 + (en.y-oy)**2) < 20) hitEnemy(i, player.weapon.dmg * player.dmgMult * 0.1);
+        });
+    });
+
+    enemies.forEach((en, i) => {
+        const dist = Math.sqrt((player.x-en.x)**2 + (player.y-en.y)**2);
+        en.x += ((player.x-en.x)/dist) * en.spd;
+        en.y += ((player.y-en.y)/dist) * en.spd;
+        if(dist < 20) {
+            player.hp -= 0.3;
+            if(player.hp <= 0) location.reload();
+        }
+    });
+
+    projectiles.forEach((p, i) => {
+        p.x += p.vx; p.y += p.vy; p.life--;
+        enemies.forEach((en, ei) => {
+            const d = Math.sqrt((p.x-en.x)**2 + (p.y-en.y)**2);
+            if(d < (p.meele ? p.s : 25)) {
+                hitEnemy(ei, p.dmg);
+                if(!p.meele) projectiles.splice(i, 1);
+            }
+        });
+        if(p.life <= 0) projectiles.splice(i, 1);
+    });
+
+    // HUD
+    document.getElementById('hp-bar').style.width = (player.hp/player.maxHp)*100 + '%';
+    document.getElementById('xp-bar').style.width = (player.xp/player.nextLvl)*100 + '%';
+    document.getElementById('hp-txt').innerText = `${Math.ceil(player.hp)}/${player.maxHp}`;
+    document.getElementById('xp-txt').innerText = `${Math.floor(player.xp)}/${Math.floor(player.nextLvl)}`;
+    document.getElementById('lvl-txt').innerText = player.lvl;
+    document.getElementById('wave-txt').innerText = `WAVE ${player.wave}`;
+}
+
+function draw() {
+    ctx.fillStyle = '#050508';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Grid de Fundo
+    ctx.strokeStyle = '#111118';
+    const spacing = 60;
+    const offX = player.x % spacing;
+    const offY = player.y % spacing;
+    for(let x=-spacing; x<canvas.width+spacing; x+=spacing) {
+        ctx.beginPath(); ctx.moveTo(x-offX, 0); ctx.lineTo(x-offX, canvas.height); ctx.stroke();
+    }
+    for(let y=-spacing; y<canvas.height+spacing; y+=spacing) {
+        ctx.beginPath(); ctx.moveTo(0, y-offY); ctx.lineTo(canvas.width, y-offY); ctx.stroke();
+    }
+
+    // Y-Sorting
+    const renderList = [...enemies, player].sort((a,b) => a.y - b.y);
+
+    renderList.forEach(obj => {
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.beginPath(); ctx.ellipse(obj.x, obj.y+5, obj.size?obj.size/2:15, 6, 0, 0, Math.PI*2); ctx.fill();
+
+        if(obj === player) {
+            ctx.fillStyle = '#4a1d96';
+            ctx.fillRect(obj.x-10, obj.y-25, 20, 30); // Corpo
+            ctx.fillStyle = '#ffdbac';
+            ctx.fillRect(obj.x-8, obj.y-30, 16, 12); // Rosto
+            ctx.fillStyle = '#000';
+            ctx.fillRect(obj.x-12, obj.y-32, 24, 4); // Chapéu
+        } else {
+            ctx.fillStyle = obj.color;
+            ctx.fillRect(obj.x-obj.size/2, obj.y-obj.size, obj.size, obj.size);
+            // Barra de HP do inimigo
+            ctx.fillStyle = '#222'; ctx.fillRect(obj.x-10, obj.y-obj.size-10, 20, 3);
+            ctx.fillStyle = '#f44'; ctx.fillRect(obj.x-10, obj.y-obj.size-10, (obj.hp/obj.maxHp)*20, 3);
+        }
+    });
+
+    orbits.forEach(o => {
+        const ox = player.x + Math.cos(o.a) * o.d;
+        const oy = player.y + Math.sin(o.a) * o.d;
+        ctx.fillStyle = '#4f4'; ctx.beginPath(); ctx.arc(ox, oy, 4, 0, Math.PI*2); ctx.fill();
+    });
+
+    projectiles.forEach(p => {
+        if(p.meele) {
+            ctx.strokeStyle = p.c; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI*2); ctx.stroke();
+        } else {
+            ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI*2); ctx.fill();
+        }
+    });
+
+    particles.forEach((pt, i) => {
+        ctx.strokeStyle = pt.c; ctx.lineWidth = 3;
+        pt.r += (pt.maxR - pt.r) * 0.2;
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI*2); ctx.stroke();
+        pt.life--; if(pt.life <= 0) particles.splice(i, 1);
+    });
+
+    update();
+    requestAnimationFrame(draw);
+}
+
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+init();
+draw();
+</script>
+</body>
+</html>
