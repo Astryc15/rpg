@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arcane Rogue: Necromancer Update</title>
+    <style>
+        :root { --gold: #d4af37; --bg: #050508; --red: #ff4d4d; --purp: #a020f0; --cyan: #00ffff; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; background: var(--bg); overflow: hidden; font-family: 'Courier New', monospace; color: white; }
+        
+        .screen { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: var(--bg); z-index: 10; padding: 20px; }
+        .screen.active { display: flex; }
+        
+        .panel { background: #111; border: 2px solid var(--gold); padding: 20px; border-radius: 8px; width: 100%; max-width: 400px; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        .btn { background: #222; border: 1px solid var(--gold); color: var(--gold); padding: 10px; margin: 5px; cursor: pointer; width: 100%; font-weight: bold; }
+        .btn:hover { background: var(--gold); color: #000; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+        .card { background: #1a1a1a; border: 1px solid #444; padding: 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+        .card:hover { border-color: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
+        .card.selected { border: 2px solid var(--gold); background: #2a2a2a; }
+
+        #hud { position: absolute; top: 10px; left: 10px; right: 10px; height: 60px; pointer-events: none; z-index: 5; display: none; }
+        .stat-bar { width: 100%; height: 12px; background: #222; border: 1px solid #444; margin-bottom: 5px; position: relative; border-radius: 6px; overflow: hidden; }
+        .fill { height: 100%; width: 100%; transition: 0.3s; }
+        .label { position: absolute; width: 100%; text-align: center; font-size: 9px; font-weight: bold; line-height: 12px; text-shadow: 1px 1px #000; }
+
+        #joystick-base { position: absolute; bottom: 50px; left: 50px; width: 80px; height: 80px; background: rgba(255,255,255,0.1); border-radius: 50%; display: none; }
+        #joystick-stick { position: absolute; top: 20px; left: 20px; width: 40px; height: 40px; background: var(--gold); border-radius: 50%; opacity: 0.6; }
+        #control-hint { position: absolute; bottom: 20px; right: 20px; color: #aaa; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 20px; font-size: 12px; z-index: 15; }
+    </style>
+</head>
+<body>
+
+    <!-- Telas de Menu -->
+    <div id="screen-main" class="screen active">
+        <h1 style="color:var(--gold); letter-spacing: 5px;">ARCANE ROGUE</h1>
+        <button class="btn" onclick="showScreen('race')">INICIAR JORNADA</button>
+        <div id="platform-info" style="margin-top:20px; color:#666;"></div>
+    </div>
+
+    <div id="screen-race" class="screen">
+        <div class="panel">
+            <h2 style="color:var(--cyan)">ESCOLHA SUA RAÇA</h2>
+            <div class="grid-2" id="race-grid"></div>
+        </div>
+    </div>
+
+    <div id="screen-custom" class="screen">
+        <div class="panel">
+            <h2 style="color:var(--gold)">APARÊNCIA</h2>
+            <p>Pele</p><div id="skin-p" class="grid-2"></div>
+            <p>Vestimenta</p><div id="cloth-p" class="grid-2"></div>
+            <button class="btn" style="margin-top:20px" onclick="showScreen('class')">PRÓXIMO</button>
+            <button class="btn" onclick="showScreen('race')">VOLTAR</button>
+        </div>
+    </div>
+
+    <div id="screen-class" class="screen">
+        <h2 style="color:var(--purp)">VOCAÇÃO ARCANO</h2>
+        <div class="grid-2" id="class-grid"></div>
+        <button class="btn" style="margin-top:20px" onclick="showScreen('custom')">VOLTAR</button>
+    </div>
+
+    <!-- Tela de Level Up (escolha dupla) -->
+    <div id="screen-levelup" class="screen" style="background:rgba(0,0,0,0.95)">
+        <h2 style="color:var(--gold)">LVL UP: ESCOLHA DUPLA</h2>
+        <div style="display:flex; gap:20px; flex-direction:column; width:100%; max-width:500px">
+            <div id="passive-choice" class="panel">
+                <p>Passiva (Tarot)</p>
+                <div class="grid-2" id="passives"></div>
+            </div>
+            <div id="skill-choice" class="panel">
+                <p>Habilidade (Ativa)</p>
+                <div class="grid-2" id="skills"></div>
+            </div>
+        </div>
+        <button class="btn" id="confirm-levelup" style="display:none; margin-top:20px" onclick="finalizeLevelUp()">CONFIRMAR</button>
+    </div>
+
+    <!-- Tela de jogo (vazia, apenas para compatibilidade) -->
+    <div id="screen-game" class="screen"></div>
+
+    <!-- HUD -->
+    <div id="hud">
+        <div class="stat-bar"><div class="label">VITALIDADE <span id="hp-txt">100/100</span></div><div id="hp-fill" class="fill" style="background:var(--red)"></div></div>
+        <div class="stat-bar"><div class="label">CONHECIMENTO LV <span id="lvl-txt">1</span></div><div id="xp-fill" class="fill" style="background:var(--cyan); width:0%"></div></div>
+    </div>
+
+    <div id="joystick-base"><div id="joystick-stick"></div></div>
+    <div id="control-hint"></div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    (function(){
+        "use strict";
+
+        // ========== DETECÇÃO DE PLATAFORMA ==========
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                         || ('ontouchstart' in window && window.innerWidth <= 800);
+        document.getElementById('platform-info').innerText = `Plataforma: ${isMobile ? 'Mobile' : 'Desktop'}`;
+        
+        // ========== CANVAS ==========
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (state === 'playing') {
+                player.x = Math.min(canvas.width - 20, Math.max(20, player.x));
+                player.y = Math.min(canvas.height - 20, Math.max(20, player.y));
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // ========== DADOS ==========
+        const DATA = {
+            races: [
+                { id: 'human', n: 'Humano', bonus: 'Equilibrado', hp: 100, spd: 3.5, skin: '#f1c27d' },
+                { id: 'elf', n: 'Elfo', bonus: '+Velocidade', hp: 80, spd: 4.5, skin: '#ffdbac' },
+                { id: 'orc', n: 'Orc', bonus: '+Vida', hp: 150, spd: 2.8, skin: '#4d5d3d' },
+                { id: 'undead', n: 'Morto-Vivo', bonus: 'Life Steal', hp: 90, spd: 3.2, skin: '#7e8d8d' }
+            ],
+            classes: [
+                { id: 'warrior', n: 'Guerreiro', w: 'Espada Longa', type: 'swing', dmg: 45, color: '#aaa', icon: '⚔️' },
+                { id: 'assassin', n: 'Ladino', w: 'Adagas Duplas', type: 'multi', dmg: 18, color: '#e74c3c', icon: '🗡️' },
+                { id: 'necro', n: 'Necromante', w: 'Foice de Almas', type: 'necro', dmg: 30, color: '#a020f0', icon: '💀' }
+            ],
+            passives: [
+                { n: 'O Louco', d: '+20% Vel', run: (p) => p.speed += 0.7 },
+                { n: 'O Mago', d: '+25% Dano', run: (p) => p.dmgMult += 0.25 },
+                { n: 'O Sol', d: '+50 HP Max', run: (p) => { p.maxHp += 50; p.hp += 50; } }
+            ],
+            skills: [
+                { n: 'Lâmina Gigante', d: 'Aumenta área de ataque', run: (p) => p.sizeMult += 0.5 },
+                { n: 'Invocação Espiritual', d: 'Espada autônoma', run: (p) => p.hasMinion = true },
+                { n: 'Explosão Arcana', d: 'Dano em área ao bater', run: (p) => p.hasNova = true }
+            ]
+        };
+
+        // ========== ESTADO ==========
+        let state = 'main';
+        let player = {
+            x: canvas.width/2, y: canvas.height/2, hp: 100, maxHp: 100, xp: 0, next: 100, lvl: 1,
+            speed: 3, dmgMult: 1, sizeMult: 1, race: null, weapon: null, skin: '#f1c27d', cloth: '#333',
+            input: { x:0, y:0 }, hasMinion: false, hasNova: false, minions: []
+        };
+
+        let enemies = [];
+        let projectiles = [];
+        let selectedPassive = null;
+        let selectedSkill = null;
+        let levelUpChoices = { passive: null, skill: null };
+
+        // ========== TELAS ==========
+        window.showScreen = function(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            
+            if (id === 'game') {
+                state = 'playing';
+                document.getElementById('hud').style.display = 'block';
+                if (isMobile) {
+                    document.getElementById('joystick-base').style.display = 'block';
+                    document.getElementById('control-hint').innerText = 'Toque para atacar';
+                } else {
+                    document.getElementById('control-hint').innerHTML = 'WASD: Mover | Clique: Atacar';
+                }
+                document.getElementById('control-hint').style.display = 'block';
+            } else {
+                document.getElementById('hud').style.display = 'none';
+                document.getElementById('joystick-base').style.display = 'none';
+                document.getElementById('control-hint').style.display = 'none';
+                const screen = document.getElementById(`screen-${id}`);
+                if (screen) screen.classList.add('active');
+                state = id;
+            }
+
+            if (id === 'race') renderRaces();
+            if (id === 'custom') renderCustom();
+            if (id === 'class') renderClasses();
+        };
+
+        function renderRaces() {
+            const g = document.getElementById('race-grid'); g.innerHTML = '';
+            DATA.races.forEach(r => {
+                const d = document.createElement('div'); d.className = 'card';
+                d.innerHTML = `<b>${r.n}</b><br><small>${r.bonus}</small>`;
+                d.onclick = () => { 
+                    player.race = r; 
+                    player.hp = r.hp; 
+                    player.maxHp = r.hp; 
+                    player.speed = r.spd; 
+                    player.skin = r.skin; 
+                    showScreen('custom'); 
+                };
+                g.appendChild(d);
+            });
+        }
+
+        function renderCustom() {
+            const sk = document.getElementById('skin-p'); sk.innerHTML = '';
+            ['#f1c27d', '#ffdbac', '#8d5524', '#4d5d3d', '#7e8d8d'].forEach(c => {
+                const b = document.createElement('div'); 
+                b.style.background = c; 
+                b.style.height = '30px'; 
+                b.style.cursor = 'pointer';
+                b.className = 'card';
+                if (player.skin === c) b.classList.add('selected');
+                b.onclick = () => { 
+                    player.skin = c; 
+                    renderCustom(); 
+                };
+                sk.appendChild(b);
+            });
+            const cl = document.getElementById('cloth-p'); cl.innerHTML = '';
+            ['#333', '#b32d2d', '#2d86b3', '#a020f0', '#2db359'].forEach(c => {
+                const b = document.createElement('div'); 
+                b.style.background = c; 
+                b.style.height = '30px'; 
+                b.style.cursor = 'pointer';
+                b.className = 'card';
+                if (player.cloth === c) b.classList.add('selected');
+                b.onclick = () => { 
+                    player.cloth = c; 
+                    renderCustom(); 
+                };
+                cl.appendChild(b);
+            });
+        }
+
+        function renderClasses() {
+            const g = document.getElementById('class-grid'); g.innerHTML = '';
+            DATA.classes.forEach(c => {
+                const d = document.createElement('div'); d.className = 'card';
+                d.innerHTML = `<h1>${c.icon}</h1><b>${c.n}</b><br><small>${c.w}</small>`;
+                d.onclick = () => { 
+                    player.weapon = c; 
+                    // Reset de posição
+                    player.x = canvas.width/2;
+                    player.y = canvas.height/2;
+                    player.minions = [];
+                    startGame(); 
+                };
+                g.appendChild(d);
+            });
+        }
+
+        function startGame() {
+            showScreen('game');
+        }
+
+        function triggerLevelUp() {
+            state = 'levelup';
+            showScreen('levelup');
+            
+            selectedPassive = null;
+            selectedSkill = null;
+            levelUpChoices = { passive: null, skill: null };
+            document.getElementById('confirm-levelup').style.display = 'none';
+            
+            const pdiv = document.getElementById('passives'); 
+            pdiv.innerHTML = '';
+            // Escolhe duas passivas aleatórias
+            const shuffledPassives = [...DATA.passives].sort(() => 0.5 - Math.random()).slice(0, 2);
+            shuffledPassives.forEach(p => {
+                const d = document.createElement('div'); 
+                d.className = 'card'; 
+                d.innerHTML = `<b>${p.n}</b><br>${p.d}`;
+                d.onclick = () => {
+                    if (selectedPassive) selectedPassive.classList.remove('selected');
+                    d.classList.add('selected');
+                    selectedPassive = d;
+                    levelUpChoices.passive = p;
+                    checkLevelUpComplete();
+                };
+                pdiv.appendChild(d);
+            });
+
+            const sdiv = document.getElementById('skills'); 
+            sdiv.innerHTML = '';
+            const shuffledSkills = [...DATA.skills].sort(() => 0.5 - Math.random()).slice(0, 2);
+            shuffledSkills.forEach(s => {
+                const d = document.createElement('div'); 
+                d.className = 'card'; 
+                d.innerHTML = `<b>${s.n}</b><br>${s.d}`;
+                d.onclick = () => {
+                    if (selectedSkill) selectedSkill.classList.remove('selected');
+                    d.classList.add('selected');
+                    selectedSkill = d;
+                    levelUpChoices.skill = s;
+                    checkLevelUpComplete();
+                };
+                sdiv.appendChild(d);
+            });
+        }
+
+        function checkLevelUpComplete() {
+            if (levelUpChoices.passive && levelUpChoices.skill) {
+                document.getElementById('confirm-levelup').style.display = 'block';
+            }
+        }
+
+        window.finalizeLevelUp = function() {
+            if (levelUpChoices.passive && levelUpChoices.skill) {
+                levelUpChoices.passive.run(player);
+                levelUpChoices.skill.run(player);
+                state = 'playing';
+                showScreen('game');
+            }
+        };
+
+        // ========== DESENHO ==========
+        function drawPlayer(ctx, p) {
+            ctx.save(); 
+            ctx.translate(p.x, p.y);
+            const bob = Math.sin(Date.now()/200)*3;
+
+            // Sombra
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath(); 
+            ctx.ellipse(0, 5, 12, 5, 0, 0, 7); 
+            ctx.fill();
+
+            // Corpo
+            ctx.fillStyle = p.cloth; 
+            ctx.fillRect(-8, -22 + bob, 16, 20);
+            // Cabeça
+            ctx.fillStyle = p.skin; 
+            ctx.fillRect(-6, -32 + bob, 12, 10);
+            // Olhos
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-3, -28 + bob, 2, 2);
+            ctx.fillRect(1, -28 + bob, 2, 2);
+            
+            // Arma
+            if (p.weapon) {
+                ctx.strokeStyle = '#ddd'; 
+                ctx.lineWidth = 3;
+                if (p.weapon.id === 'warrior') { 
+                    ctx.fillStyle = '#999'; 
+                    ctx.fillRect(10, -25 + bob, 4, -25 * p.sizeMult);
+                    ctx.fillStyle = '#663300'; 
+                    ctx.fillRect(8, -25 + bob, 8, 4);
+                } else if (p.weapon.id === 'assassin') { 
+                    ctx.fillStyle = '#ff4d4d'; 
+                    ctx.fillRect(10, -15 + bob, 3, -12); 
+                    ctx.fillRect(-13, -15 + bob, 3, -12);
+                } else if (p.weapon.id === 'necro') { 
+                    ctx.strokeStyle = '#a020f0'; 
+                    ctx.lineWidth = 4;
+                    ctx.beginPath(); 
+                    ctx.moveTo(8, -5 + bob); 
+                    ctx.lineTo(12, -45 + bob); 
+                    ctx.stroke();
+                    ctx.beginPath(); 
+                    ctx.arc(0, -45 + bob, 15, 0, Math.PI); 
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+        }
+
+        // ========== ATUALIZAÇÃO ==========
+        function update() {
+            if (state !== 'playing') return;
+
+            // Movimento com limites
+            player.x += player.input.x * player.speed;
+            player.y += player.input.y * player.speed;
+            player.x = Math.max(20, Math.min(canvas.width - 20, player.x));
+            player.y = Math.max(40, Math.min(canvas.height - 20, player.y));
+
+            // Regeneração passiva
+            if (player.hp < player.maxHp) player.hp += 0.02;
+
+            // Spawn de inimigos
+            if (Math.random() < 0.03) {
+                const a = Math.random() * Math.PI * 2;
+                const dist = 500;
+                enemies.push({ 
+                    x: player.x + Math.cos(a)*dist, 
+                    y: player.y + Math.sin(a)*dist, 
+                    hp: 40 + player.lvl * 10,
+                    speed: 1.2 + player.lvl * 0.05
+                });
+            }
+
+            // Inimigos
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const en = enemies[i];
+                const dx = player.x - en.x;
+                const dy = player.y - en.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist > 1) {
+                    en.x += (dx / dist) * en.speed;
+                    en.y += (dy / dist) * en.speed;
+                }
+                
+                if (dist < 25) {
+                    player.hp -= 0.8;
+                }
+
+                if (en.hp <= 0) {
+                    enemies.splice(i, 1);
+                    player.xp += 25;
+                    if (player.race && player.race.id === 'undead') {
+                        player.hp = Math.min(player.maxHp, player.hp + 3);
+                    }
+                    if (player.xp >= player.next) {
+                        player.lvl++;
+                        player.xp = 0;
+                        player.next = Math.floor(player.next * 1.5);
+                        triggerLevelUp();
+                        break; // Interrompe para evitar processar mais inimigos
+                    }
+                }
+            }
+
+            // Minions (Necromante ou habilidade)
+            if (player.weapon && player.weapon.id === 'necro' || player.hasMinion) {
+                if (player.minions.length < 3 && Math.random() < 0.005) {
+                    player.minions.push({ 
+                        x: player.x + (Math.random()-0.5)*40, 
+                        y: player.y + (Math.random()-0.5)*40, 
+                        life: 500,
+                        dmg: 8
+                    });
+                }
+            }
+            for (let i = player.minions.length - 1; i >= 0; i--) {
+                const m = player.minions[i];
+                let closestEnemy = null;
+                let minDist = Infinity;
+                for (let en of enemies) {
+                    const d = Math.hypot(en.x - m.x, en.y - m.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        closestEnemy = en;
+                    }
+                }
+                if (closestEnemy) {
+                    const dx = closestEnemy.x - m.x;
+                    const dy = closestEnemy.y - m.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > 1) {
+                        m.x += (dx / dist) * 3;
+                        m.y += (dy / dist) * 3;
+                    }
+                    if (dist < 35) {
+                        closestEnemy.hp -= m.dmg * player.dmgMult;
+                    }
+                }
+                m.life--;
+                if (m.life <= 0) player.minions.splice(i, 1);
+            }
+
+            // Projéteis
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                
+                let hit = false;
+                for (let en of enemies) {
+                    if (Math.hypot(en.x - p.x, en.y - p.y) < 30 * player.sizeMult) {
+                        en.hp -= p.dmg * player.dmgMult;
+                        if (player.hasNova) {
+                            // Efeito de explosão em área
+                            for (let en2 of enemies) {
+                                if (Math.hypot(en2.x - p.x, en2.y - p.y) < 60) {
+                                    en2.hp -= p.dmg * player.dmgMult * 0.3;
+                                }
+                            }
+                        }
+                        hit = true;
+                        break;
+                    }
+                }
+                if (hit || p.life <= 0 || p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                    projectiles.splice(i, 1);
+                }
+            }
+
+            // Atualizar HUD
+            const hpPercent = (player.hp / player.maxHp) * 100;
+            document.getElementById('hp-fill').style.width = Math.max(0, hpPercent) + '%';
+            const xpPercent = (player.xp / player.next) * 100;
+            document.getElementById('xp-fill').style.width = xpPercent + '%';
+            document.getElementById('hp-txt').innerText = `${Math.floor(player.hp)}/${player.maxHp}`;
+            document.getElementById('lvl-txt').innerText = player.lvl;
+
+            if (player.hp <= 0) {
+                alert('Game Over!');
+                showScreen('main');
+                // Reset
+                enemies = [];
+                projectiles = [];
+                player.minions = [];
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = '#050508'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if (state === 'playing') {
+                // Ordenar por Y para profundidade
+                const entities = [...enemies.map(e => ({ ...e, type: 'enemy' })), 
+                                  ...player.minions.map(m => ({ ...m, type: 'minion' })),
+                                  { ...player, type: 'player' }];
+                entities.sort((a, b) => (a.y || 0) - (b.y || 0));
+                
+                for (let e of entities) {
+                    if (e.type === 'player') {
+                        drawPlayer(ctx, player);
+                    } else if (e.type === 'enemy') {
+                        ctx.fillStyle = '#333';
+                        ctx.fillRect(e.x-12, e.y-20, 24, 20);
+                        ctx.fillStyle = '#e63946';
+                        ctx.fillRect(e.x-15, e.y-30, 30 * (e.hp/(40+player.lvl*10)), 4);
+                    } else if (e.type === 'minion') {
+                        ctx.fillStyle = '#aaccff';
+                        ctx.globalAlpha = 0.7;
+                        ctx.fillRect(e.x-8, e.y-12, 16, 12);
+                        ctx.globalAlpha = 1.0;
+                    }
+                }
+                
+                // Projéteis
+                for (let p of projectiles) {
+                    ctx.fillStyle = player.weapon ? player.weapon.color : '#fff';
+                    ctx.beginPath(); 
+                    ctx.arc(p.x, p.y, 8 * player.sizeMult, 0, Math.PI*2); 
+                    ctx.fill();
+                }
+            }
+            
+            update();
+            requestAnimationFrame(draw);
+        }
+
+        // ========== CONTROLES ==========
+        const keys = {};
+        window.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) {
+                e.preventDefault();
+            }
+            updateInput();
+        });
+        window.addEventListener('keyup', e => {
+            keys[e.key.toLowerCase()] = false;
+            updateInput();
+        });
+
+        function updateInput() {
+            player.input.x = (keys['d'] || keys['arrowright'] ? 1 : 0) - (keys['a'] || keys['arrowleft'] ? 1 : 0);
+            player.input.y = (keys['s'] || keys['arrowdown'] ? 1 : 0) - (keys['w'] || keys['arrowup'] ? 1 : 0);
+        }
+
+        // Joystick mobile
+        const jb = document.getElementById('joystick-base');
+        const js = document.getElementById('joystick-stick');
+        if (isMobile) {
+            jb.addEventListener('touchstart', handleJoystick);
+            jb.addEventListener('touchmove', handleJoystick);
+            jb.addEventListener('touchend', resetJoystick);
+            jb.addEventListener('touchcancel', resetJoystick);
+        }
+
+        function handleJoystick(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = jb.getBoundingClientRect();
+            const centerX = rect.left + rect.width/2;
+            const centerY = rect.top + rect.height/2;
+            let dx = touch.clientX - centerX;
+            let dy = touch.clientY - centerY;
+            const dist = Math.min(30, Math.hypot(dx, dy));
+            const angle = Math.atan2(dy, dx);
+            
+            js.style.transform = `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`;
+            player.input.x = Math.cos(angle) * (dist/30);
+            player.input.y = Math.sin(angle) * (dist/30);
+        }
+
+        function resetJoystick(e) {
+            e.preventDefault();
+            js.style.transform = 'translate(0,0)';
+            player.input.x = 0;
+            player.input.y = 0;
+        }
+
+        // Ataque
+        function handleAttack(e) {
+            if (state !== 'playing') return;
+            e.preventDefault();
+            
+            let clientX, clientY;
+            if (e.touches) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            const angle = Math.atan2(clientY - player.y, clientX - player.x);
+            const w = player.weapon;
+            if (!w) return;
+            
+            const speed = 7;
+            const baseDmg = w.dmg;
+            
+            if (w.type === 'swing') {
+                projectiles.push({ 
+                    x: player.x, y: player.y, 
+                    vx: Math.cos(angle)*4, vy: Math.sin(angle)*4, 
+                    life: 12, dmg: baseDmg 
+                });
+            } else if (w.type === 'multi') {
+                for (let i = -0.2; i <= 0.2; i+=0.2) {
+                    projectiles.push({ 
+                        x: player.x, y: player.y, 
+                        vx: Math.cos(angle+i)*8, vy: Math.sin(angle+i)*8, 
+                        life: 20, dmg: baseDmg 
+                    });
+                }
+            } else if (w.type === 'necro') {
+                projectiles.push({ 
+                    x: player.x, y: player.y, 
+                    vx: Math.cos(angle)*6, vy: Math.sin(angle)*6, 
+                    life: 25, dmg: baseDmg 
+                });
+            }
+        }
+
+        canvas.addEventListener('mousedown', handleAttack);
+        canvas.addEventListener('touchstart', handleAttack, {passive: false});
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+        // Iniciar loop
+        draw();
+        showScreen('main');
+        
+        // Dica inicial
+        document.getElementById('control-hint').innerHTML = isMobile ? 'Toque para atacar' : 'WASD: Mover | Clique: Atacar';
+    })();
+</script>
+</body>
+</html>
