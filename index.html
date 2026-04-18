@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arcane Rogue: D&D Edition</title>
+    <style>
+        :root { --gold: #d4af37; --bg: #050508; --red: #ff4d4d; --purp: #a020f0; --cyan: #00ffff; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; background: var(--bg); overflow: hidden; font-family: 'Courier New', monospace; color: white; }
+        
+        .screen { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: var(--bg); z-index: 10; padding: 20px; opacity: 0; transition: opacity 0.3s; }
+        .screen.active { display: flex; opacity: 1; }
+        
+        .panel { background: #111; border: 2px solid var(--gold); padding: 20px; border-radius: 8px; width: 100%; max-width: 400px; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        .btn { background: #222; border: 1px solid var(--gold); color: var(--gold); padding: 10px; margin: 5px; cursor: pointer; width: 100%; font-weight: bold; transition: all 0.2s; border-radius: 4px; }
+        .btn:hover { background: var(--gold); color: #000; box-shadow: 0 0 15px var(--gold); transform: scale(1.02); }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        .card { background: #1a1a1a; border: 1px solid #444; padding: 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; transition: all 0.2s; }
+        .card:hover { border-color: var(--cyan); box-shadow: 0 0 15px var(--cyan); transform: translateY(-2px); }
+        .card.selected { border: 2px solid var(--gold); background: #2a2a2a; box-shadow: 0 0 20px var(--gold); }
+
+        #hud { position: absolute; top: 10px; left: 10px; right: 10px; pointer-events: none; z-index: 5; display: none; }
+        .stat-bar { width: 100%; height: 12px; background: #222; border: 1px solid #444; margin-bottom: 5px; position: relative; border-radius: 6px; overflow: hidden; }
+        .fill { height: 100%; width: 100%; transition: 0.3s; }
+        .label { position: absolute; width: 100%; text-align: center; font-size: 9px; font-weight: bold; line-height: 12px; text-shadow: 1px 1px #000; }
+
+        #joystick-base { position: absolute; bottom: 50px; left: 50px; width: 80px; height: 80px; background: rgba(255,255,255,0.1); border-radius: 50%; display: none; backdrop-filter: blur(2px); border: 1px solid var(--gold); }
+        #joystick-stick { position: absolute; top: 20px; left: 20px; width: 40px; height: 40px; background: var(--gold); border-radius: 50%; opacity: 0.8; box-shadow: 0 0 15px var(--gold); transition: box-shadow 0.1s; }
+        #control-hint { position: absolute; bottom: 20px; right: 20px; color: #aaa; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 20px; font-size: 12px; z-index: 15; }
+        .damage-flash { background: radial-gradient(circle, rgba(255,0,0,0.3) 0%, transparent 70%); position: absolute; inset: 0; pointer-events: none; z-index: 100; opacity: 0; transition: opacity 0.1s; }
+
+        .wave-badge { position: absolute; top: 80px; left: 20px; background: rgba(0,0,0,0.7); color: var(--cyan); padding: 5px 15px; border-radius: 20px; border: 1px solid var(--cyan); font-weight: bold; z-index: 6; }
+        .boss-alert { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); background: rgba(160,32,240,0.9); padding: 20px 40px; border-radius: 10px; font-size: 2rem; font-weight: bold; text-shadow: 0 0 20px white; z-index: 100; display: none; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; transform: translate(-50%, -55%); } 100% { opacity: 0.8; } }
+    </style>
+</head>
+<body>
+    <div class="damage-flash" id="damage-flash"></div>
+    <div class="boss-alert" id="boss-alert">🔥 BOSS INCOMING! 🔥</div>
+
+    <!-- Telas de Menu -->
+    <div id="screen-main" class="screen active">
+        <h1 style="color:var(--gold); letter-spacing: 5px; text-shadow: 0 0 20px var(--gold);">ARCANE ROGUE</h1>
+        <button class="btn" onclick="showScreen('race')">INICIAR JORNADA</button>
+        <div id="platform-info" style="margin-top:20px; color:#666;"></div>
+    </div>
+
+    <div id="screen-race" class="screen">
+        <div class="panel">
+            <h2 style="color:var(--cyan); text-shadow:0 0 10px var(--cyan);">ESCOLHA SUA RAÇA</h2>
+            <div class="grid-2" id="race-grid"></div>
+        </div>
+    </div>
+
+    <div id="screen-custom" class="screen">
+        <div class="panel">
+            <h2 style="color:var(--gold); text-shadow:0 0 10px var(--gold);">APARÊNCIA</h2>
+            <p>Pele</p><div id="skin-p" class="grid-2"></div>
+            <p>Vestimenta</p><div id="cloth-p" class="grid-2"></div>
+            <button class="btn" style="margin-top:20px" onclick="showScreen('class')">PRÓXIMO</button>
+            <button class="btn" onclick="showScreen('race')">VOLTAR</button>
+        </div>
+    </div>
+
+    <div id="screen-class" class="screen">
+        <h2 style="color:var(--purp); text-shadow:0 0 10px var(--purp);">VOCAÇÃO ARCANO</h2>
+        <div class="grid-2" id="class-grid"></div>
+        <button class="btn" style="margin-top:20px" onclick="showScreen('custom')">VOLTAR</button>
+    </div>
+
+    <!-- Tela de Level Up (escolha dupla) -->
+    <div id="screen-levelup" class="screen" style="background:rgba(0,0,0,0.95)">
+        <h2 style="color:var(--gold); text-shadow:0 0 20px var(--gold);">LVL UP: ESCOLHA DUPLA</h2>
+        <div style="display:flex; gap:20px; flex-direction:column; width:100%; max-width:600px">
+            <div id="passive-choice" class="panel">
+                <p>Passiva (Talento)</p>
+                <div class="grid-3" id="passives"></div>
+            </div>
+            <div id="skill-choice" class="panel">
+                <p>Habilidade Ativa (Magia/Técnica)</p>
+                <div class="grid-3" id="skills"></div>
+            </div>
+        </div>
+        <button class="btn" id="confirm-levelup" style="display:none; margin-top:20px" onclick="finalizeLevelUp()">CONFIRMAR</button>
+    </div>
+
+    <div id="screen-game" class="screen"></div>
+
+    <!-- HUD -->
+    <div id="hud">
+        <div class="stat-bar"><div class="label">VITALIDADE <span id="hp-txt">100/100</span></div><div id="hp-fill" class="fill" style="background:var(--red)"></div></div>
+        <div class="stat-bar"><div class="label">CONHECIMENTO LV <span id="lvl-txt">1</span></div><div id="xp-fill" class="fill" style="background:var(--cyan); width:0%"></div></div>
+        <div class="wave-badge" id="wave-display">WAVE 1</div>
+    </div>
+
+    <div id="joystick-base"><div id="joystick-stick"></div></div>
+    <div id="control-hint"></div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    (function(){
+        "use strict";
+
+        // ========== DETECÇÃO DE PLATAFORMA ==========
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                         || ('ontouchstart' in window && window.innerWidth <= 800);
+        document.getElementById('platform-info').innerText = `Plataforma: ${isMobile ? 'Mobile' : 'Desktop'}`;
+        
+        // ========== CANVAS ==========
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // ========== ESTADO GLOBAL ==========
+        let state = 'main';
+        let player = {
+            x: canvas.width/2, y: canvas.height/2, hp: 100, maxHp: 100, xp: 0, next: 100, lvl: 1,
+            speed: 3, dmgMult: 1, sizeMult: 1, race: null, weapon: null, skin: '#f1c27d', cloth: '#333',
+            input: { x:0, y:0 }, hasMinion: false, hasNova: false, minions: [], hitFlash: 0,
+            // Novos atributos para habilidades D&D
+            spells: [],          // Lista de habilidades ativas aprendidas
+            passives: [],        // Lista de talentos passivos
+            summonLimit: 0,      // Apenas necromante pode aumentar
+        };
+
+        let enemies = [];
+        let projectiles = [];
+        let particles = [];
+        let screenShake = 0;
+        let wave = 1;
+        let enemiesToSpawn = 5;
+        let enemiesSpawned = 0;
+        let waveInProgress = false;
+        let bossActive = false;
+        let bossDefeated = false;
+        let selectedPassive = null;
+        let selectedSkill = null;
+        let levelUpChoices = { passive: null, skill: null };
+
+        // ========== DADOS EXPANDIDOS (D&D) ==========
+        const DATA = {
+            races: [
+                { id: 'human', n: 'Humano', bonus: 'Equilibrado', hp: 100, spd: 3.5, skin: '#f1c27d' },
+                { id: 'elf', n: 'Elfo', bonus: '+Velocidade', hp: 80, spd: 4.5, skin: '#ffdbac' },
+                { id: 'orc', n: 'Orc', bonus: '+Vida', hp: 150, spd: 2.8, skin: '#4d5d3d' },
+                { id: 'undead', n: 'Morto-Vivo', bonus: 'Life Steal', hp: 90, spd: 3.2, skin: '#7e8d8d' }
+            ],
+            classes: [
+                { id: 'warrior', n: 'Guerreiro', w: 'Espada Longa', type: 'swing', dmg: 45, color: '#aaa', icon: '⚔️' },
+                { id: 'assassin', n: 'Ladino', w: 'Adagas Duplas', type: 'multi', dmg: 18, color: '#e74c3c', icon: '🗡️' },
+                { id: 'necro', n: 'Necromante', w: 'Foice de Almas', type: 'necro', dmg: 30, color: '#a020f0', icon: '💀' }
+            ],
+            // Passivas estilo D&D (3 opções por level up)
+            passives: [
+                { n: 'Robustez', d: '+30 HP Max', run: (p) => { p.maxHp += 30; p.hp += 30; } },
+                { n: 'Agilidade Felina', d: '+15% Velocidade', run: (p) => p.speed += 0.5 },
+                { n: 'Fúria', d: '+20% Dano', run: (p) => p.dmgMult += 0.2 },
+                { n: 'Sangue Frio', d: 'Regeneração +0.5/s', run: (p) => p.regen = (p.regen||0) + 0.5 },
+                { n: 'Pele de Pedra', d: 'Reduz dano em 15%', run: (p) => p.dmgReduction = (p.dmgReduction||0) + 0.15 },
+                { n: 'Mente Arcana', d: 'Reduz cooldown das skills', run: (p) => p.cooldownReduction = true },
+                { n: 'Sorte do Aventureiro', d: '10% chance de crítico (2x dano)', run: (p) => p.critChance = (p.critChance||0) + 0.1 },
+                { n: 'Presença Aterradora', d: 'Inimigos próximos são lentos', run: (p) => p.slowAura = true }
+            ],
+            // Habilidades ativas (magias/técnicas) - 3 opções
+            skills: [
+                { n: 'Golpe Poderoso', d: 'Ataque corpo a corpo em área', type: 'active', cd: 3, run: (p) => p.spells.push('cleave') },
+                { n: 'Bola de Fogo', d: 'Explosão à distância', type: 'active', cd: 5, run: (p) => p.spells.push('fireball') },
+                { n: 'Raio Ardente', d: 'Projétil perfurante', type: 'active', cd: 2, run: (p) => p.spells.push('scorchingray') },
+                { n: 'Escudo Arcano', d: 'Bloqueia próximo dano', type: 'active', cd: 8, run: (p) => p.spells.push('shield') },
+                { n: 'Passo das Sombras', d: 'Teleporte curto', type: 'active', cd: 4, run: (p) => p.spells.push('shadowstep') },
+                { n: 'Invocar Morto-Vivo', d: 'Invoca um esqueleto (Necromante apenas)', type: 'active', cd: 10, reqClass: 'necro', run: (p) => { if(p.weapon?.id==='necro') p.spells.push('summon'); } },
+                { n: 'Rajada de Adagas', d: 'Dispara 5 adagas em leque', type: 'active', cd: 3, run: (p) => p.spells.push('fanofknives') },
+                { n: 'Cura Rápida', d: 'Recupera 30 HP', type: 'active', cd: 6, run: (p) => p.spells.push('heal') }
+            ]
+        };
+
+        // ========== FUNÇÕES AUXILIARES ==========
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (state === 'playing') {
+                player.x = Math.min(canvas.width - 20, Math.max(20, player.x));
+                player.y = Math.min(canvas.height - 20, Math.max(20, player.y));
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // ========== TELAS ==========
+        window.showScreen = function(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            if (id === 'game') {
+                state = 'playing';
+                document.getElementById('hud').style.display = 'block';
+                if (isMobile) {
+                    document.getElementById('joystick-base').style.display = 'block';
+                    document.getElementById('control-hint').innerText = 'Toque para atacar';
+                } else {
+                    document.getElementById('control-hint').innerHTML = 'WASD: Mover | Clique: Atacar | 1-4: Skills';
+                }
+                document.getElementById('control-hint').style.display = 'block';
+                if (!waveInProgress) startWave();
+            } else {
+                document.getElementById('hud').style.display = 'none';
+                document.getElementById('joystick-base').style.display = 'none';
+                document.getElementById('control-hint').style.display = 'none';
+                const screen = document.getElementById(`screen-${id}`);
+                if (screen) screen.classList.add('active');
+                state = id;
+            }
+            if (id === 'race') renderRaces();
+            if (id === 'custom') renderCustom();
+            if (id === 'class') renderClasses();
+        };
+
+        function renderRaces() {
+            const g = document.getElementById('race-grid'); g.innerHTML = '';
+            DATA.races.forEach(r => {
+                const d = document.createElement('div'); d.className = 'card';
+                d.innerHTML = `<b>${r.n}</b><br><small>${r.bonus}</small>`;
+                d.onclick = () => { 
+                    player.race = r; player.hp = r.hp; player.maxHp = r.hp; player.speed = r.spd; player.skin = r.skin; 
+                    showScreen('custom'); 
+                };
+                g.appendChild(d);
+            });
+        }
+
+        function renderCustom() {
+            const sk = document.getElementById('skin-p'); sk.innerHTML = '';
+            ['#f1c27d', '#ffdbac', '#8d5524', '#4d5d3d', '#7e8d8d'].forEach(c => {
+                const b = document.createElement('div'); b.style.background = c; b.style.height='30px'; b.style.cursor='pointer'; b.className='card';
+                if (player.skin === c) b.classList.add('selected');
+                b.onclick = () => { player.skin = c; renderCustom(); };
+                sk.appendChild(b);
+            });
+            const cl = document.getElementById('cloth-p'); cl.innerHTML = '';
+            ['#333', '#b32d2d', '#2d86b3', '#a020f0', '#2db359'].forEach(c => {
+                const b = document.createElement('div'); b.style.background = c; b.style.height='30px'; b.style.cursor='pointer'; b.className='card';
+                if (player.cloth === c) b.classList.add('selected');
+                b.onclick = () => { player.cloth = c; renderCustom(); };
+                cl.appendChild(b);
+            });
+        }
+
+        function renderClasses() {
+            const g = document.getElementById('class-grid'); g.innerHTML = '';
+            DATA.classes.forEach(c => {
+                const d = document.createElement('div'); d.className = 'card';
+                d.innerHTML = `<h1>${c.icon}</h1><b>${c.n}</b><br><small>${c.w}</small>`;
+                d.onclick = () => { 
+                    player.weapon = c; 
+                    player.x = canvas.width/2; player.y = canvas.height/2;
+                    player.minions = []; player.spells = [];
+                    // Necromante já começa com um minion e habilidade de invocar
+                    if (c.id === 'necro') {
+                        player.hasMinion = true;
+                        player.spells.push('summon');
+                    }
+                    startGame(); 
+                };
+                g.appendChild(d);
+            });
+        }
+
+        function startGame() {
+            wave = 1;
+            enemiesToSpawn = 5;
+            enemiesSpawned = 0;
+            bossActive = false;
+            bossDefeated = false;
+            waveInProgress = false;
+            enemies = [];
+            projectiles = [];
+            particles = [];
+            player.hp = player.maxHp;
+            player.xp = 0; player.lvl = 1; player.next = 100;
+            showScreen('game');
+        }
+
+        // ========== SISTEMA DE WAVES & BOSS ==========
+        function startWave() {
+            waveInProgress = true;
+            enemiesSpawned = 0;
+            const isBossWave = wave % 15 === 0;
+            if (isBossWave) {
+                enemiesToSpawn = 1;
+                bossActive = true;
+                bossDefeated = false;
+                // Exibir alerta de boss
+                const alertEl = document.getElementById('boss-alert');
+                alertEl.style.display = 'block';
+                setTimeout(() => alertEl.style.display = 'none', 2000);
+            } else {
+                enemiesToSpawn = 5 + wave * 2;
+            }
+            document.getElementById('wave-display').innerText = `WAVE ${wave}${isBossWave ? ' 🔥BOSS🔥' : ''}`;
+        }
+
+        function spawnEnemy() {
+            if (!waveInProgress || enemiesSpawned >= enemiesToSpawn) return;
+            const a = Math.random() * Math.PI * 2;
+            const dist = 500;
+            let hp, speed, isBoss = (wave % 15 === 0 && enemiesSpawned === 0);
+            if (isBoss) {
+                hp = 300 + wave * 50;
+                speed = 0.8;
+            } else {
+                hp = 30 + wave * 8 + Math.floor(player.lvl * 5);
+                speed = 1.2 + wave * 0.05;
+            }
+            enemies.push({
+                x: player.x + Math.cos(a)*dist, y: player.y + Math.sin(a)*dist,
+                hp, maxHp: hp, speed, isBoss,
+                size: isBoss ? 2.0 : 1.0,
+                // Boss pode ter ataque especial
+                attackCooldown: 0
+            });
+            enemiesSpawned++;
+            if (enemiesSpawned >= enemiesToSpawn) waveInProgress = false;
+        }
+
+        function checkWaveCompletion() {
+            if (!waveInProgress && enemies.length === 0) {
+                if (bossActive && !bossDefeated) {
+                    // Boss derrotado!
+                    bossDefeated = true;
+                    bossActive = false;
+                    // Recompensa: cura completa, +1 level, item?
+                    player.hp = player.maxHp;
+                    player.xp += 200;
+                    addParticles(player.x, player.y, '#ffdd44', 30);
+                }
+                wave++;
+                startWave();
+            }
+        }
+
+        // ========== LEVEL UP ==========
+        function triggerLevelUp() {
+            state = 'levelup';
+            showScreen('levelup');
+            selectedPassive = selectedSkill = null;
+            levelUpChoices = { passive: null, skill: null };
+            document.getElementById('confirm-levelup').style.display = 'none';
+            
+            const pdiv = document.getElementById('passives'); pdiv.innerHTML = '';
+            // Escolhe 3 passivas aleatórias
+            const shuffledPassives = [...DATA.passives].sort(() => 0.5 - Math.random()).slice(0, 3);
+            shuffledPassives.forEach(p => {
+                const d = document.createElement('div'); d.className = 'card'; 
+                d.innerHTML = `<b>${p.n}</b><br><small>${p.d}</small>`;
+                d.onclick = () => {
+                    if (selectedPassive) selectedPassive.classList.remove('selected');
+                    d.classList.add('selected'); selectedPassive = d; levelUpChoices.passive = p;
+                    checkLevelUpComplete();
+                };
+                pdiv.appendChild(d);
+            });
+
+            const sdiv = document.getElementById('skills'); sdiv.innerHTML = '';
+            // Filtra habilidades disponíveis (ex: Invocar apenas necromante)
+            let availableSkills = DATA.skills.filter(s => !s.reqClass || player.weapon?.id === s.reqClass);
+            // Se já tem muitas skills, pode limitar?
+            const shuffledSkills = [...availableSkills].sort(() => 0.5 - Math.random()).slice(0, 3);
+            shuffledSkills.forEach(s => {
+                const d = document.createElement('div'); d.className = 'card'; 
+                d.innerHTML = `<b>${s.n}</b><br><small>${s.d}</small>`;
+                d.onclick = () => {
+                    if (selectedSkill) selectedSkill.classList.remove('selected');
+                    d.classList.add('selected'); selectedSkill = d; levelUpChoices.skill = s;
+                    checkLevelUpComplete();
+                };
+                sdiv.appendChild(d);
+            });
+        }
+
+        function checkLevelUpComplete() {
+            if (levelUpChoices.passive && levelUpChoices.skill) 
+                document.getElementById('confirm-levelup').style.display = 'block';
+        }
+
+        window.finalizeLevelUp = function() {
+            if (levelUpChoices.passive && levelUpChoices.skill) {
+                levelUpChoices.passive.run(player);
+                levelUpChoices.skill.run(player);
+                state = 'playing';
+                showScreen('game');
+            }
+        };
+
+        // ========== EFEITOS ==========
+        function addParticles(x, y, color, count=8) {
+            for(let i=0; i<count; i++) {
+                particles.push({ x, y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 30, color, size: Math.random()*4+2 });
+            }
+        }
+        function shakeScreen(amount) { screenShake = amount; }
+        function flashDamage() {
+            const flash = document.getElementById('damage-flash');
+            flash.style.opacity = '0.5';
+            setTimeout(() => flash.style.opacity = '0', 100);
+        }
+
+        // ========== DESENHO ==========
+        function drawPlayer(ctx, p) {
+            ctx.save(); 
+            let shakeX = 0, shakeY = 0;
+            if (screenShake > 0) { shakeX = (Math.random()-0.5)*screenShake; shakeY = (Math.random()-0.5)*screenShake; }
+            ctx.translate(p.x + shakeX, p.y + shakeY);
+            const bob = Math.sin(Date.now()/200)*3;
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath(); ctx.ellipse(0, 5, 12, 5, 0, 0, 7); ctx.fill();
+            ctx.fillStyle = p.hitFlash > 0 ? '#ffaaaa' : p.cloth;
+            ctx.fillRect(-8, -22 + bob, 16, 20);
+            ctx.fillStyle = p.hitFlash > 0 ? '#ffcccc' : p.skin;
+            ctx.fillRect(-6, -32 + bob, 12, 10);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(-3, -28 + bob, 2, 2); ctx.fillRect(1, -28 + bob, 2, 2);
+            
+            if (p.weapon) {
+                ctx.lineWidth = 3;
+                if (p.weapon.id === 'warrior') { 
+                    ctx.fillStyle = '#999'; ctx.fillRect(10, -25 + bob, 4, -25 * p.sizeMult);
+                    ctx.fillStyle = '#663300'; ctx.fillRect(8, -25 + bob, 8, 4);
+                } else if (p.weapon.id === 'assassin') { 
+                    ctx.fillStyle = '#ff4d4d'; 
+                    ctx.fillRect(10, -15 + bob, 3, -12); ctx.fillRect(-13, -15 + bob, 3, -12);
+                } else if (p.weapon.id === 'necro') { 
+                    ctx.strokeStyle = '#a020f0'; ctx.lineWidth = 4;
+                    ctx.beginPath(); ctx.moveTo(8, -5 + bob); ctx.lineTo(12, -45 + bob); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(0, -45 + bob, 15, 0, Math.PI); ctx.stroke();
+                }
+            }
+            ctx.restore();
+        }
+
+        // ========== ATUALIZAÇÃO ==========
+        function update() {
+            if (state !== 'playing') return;
+            if (screenShake > 0) screenShake *= 0.9;
+            if (player.hitFlash > 0) player.hitFlash--;
+
+            // Movimento
+            player.x += player.input.x * player.speed;
+            player.y += player.input.y * player.speed;
+            player.x = Math.max(20, Math.min(canvas.width - 20, player.x));
+            player.y = Math.max(40, Math.min(canvas.height - 20, player.y));
+
+            // Regeneração passiva
+            if (player.hp < player.maxHp) player.hp += (player.regen || 0.02);
+
+            // Spawn de inimigos da wave
+            if (waveInProgress && enemiesSpawned < enemiesToSpawn) {
+                if (Math.random() < 0.02) spawnEnemy();
+            }
+            checkWaveCompletion();
+
+            // Inimigos
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const en = enemies[i];
+                const dx = player.x - en.x, dy = player.y - en.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 1) { en.x += (dx/dist)*en.speed; en.y += (dy/dist)*en.speed; }
+                
+                // Aura de lentidão (passiva)
+                if (player.slowAura && dist < 100) { en.x += (dx/dist)*0.5; en.y += (dy/dist)*0.5; }
+
+                if (dist < (en.isBoss ? 40 : 25)) {
+                    let dmg = en.isBoss ? 2.5 : 0.8;
+                    if (player.dmgReduction) dmg *= (1 - player.dmgReduction);
+                    player.hp -= dmg;
+                    player.hitFlash = 10;
+                    flashDamage(); shakeScreen(5);
+                }
+
+                // Boss attack especial
+                if (en.isBoss) {
+                    if (en.attackCooldown <= 0 && dist < 300) {
+                        // Dispara projéteis em leque
+                        for (let j=0; j<5; j++) {
+                            const angle = Math.atan2(player.y - en.y, player.x - en.x) + (j-2)*0.3;
+                            projectiles.push({ x: en.x, y: en.y, vx: Math.cos(angle)*4, vy: Math.sin(angle)*4, life: 50, dmg: 15, enemy: true });
+                        }
+                        en.attackCooldown = 80;
+                    } else en.attackCooldown--;
+                }
+
+                if (en.hp <= 0) {
+                    addParticles(en.x, en.y, en.isBoss ? '#ffaa00' : '#ff6644', en.isBoss ? 25 : 10);
+                    if (en.isBoss) bossActive = false;
+                    enemies.splice(i, 1);
+                    player.xp += en.isBoss ? 150 : 20 + wave * 2;
+                    if (player.race?.id === 'undead') player.hp = Math.min(player.maxHp, player.hp + (en.isBoss?10:3));
+                    if (player.xp >= player.next) {
+                        player.lvl++; player.xp = 0; player.next = Math.floor(player.next * 1.5);
+                        triggerLevelUp(); break;
+                    }
+                }
+            }
+
+            // Minions (apenas necromante)
+            if (player.hasMinion && player.weapon?.id === 'necro') {
+                if (player.minions.length < 3 && Math.random() < 0.005)
+                    player.minions.push({ x: player.x+(Math.random()-0.5)*40, y: player.y+(Math.random()-0.5)*40, life: 600, dmg: 12 });
+            }
+            for (let i = player.minions.length-1; i>=0; i--) {
+                const m = player.minions[i];
+                let closest = null, minDist = Infinity;
+                for (let en of enemies) { const d = Math.hypot(en.x-m.x, en.y-m.y); if (d<minDist) { minDist=d; closest=en; } }
+                if (closest) {
+                    const dx = closest.x-m.x, dy = closest.y-m.y, dist = Math.hypot(dx,dy);
+                    if (dist>1) { m.x += (dx/dist)*3.5; m.y += (dy/dist)*3.5; }
+                    if (dist<35) { 
+                        let dmg = m.dmg * player.dmgMult;
+                        if (player.critChance && Math.random() < player.critChance) dmg *= 2;
+                        closest.hp -= dmg; 
+                        addParticles(closest.x, closest.y, '#aaccff', 2); 
+                    }
+                }
+                m.life--; if (m.life<=0) player.minions.splice(i,1);
+            }
+
+            // Projéteis (inclui inimigos)
+            for (let i=projectiles.length-1; i>=0; i--) {
+                const p = projectiles[i];
+                p.x += p.vx; p.y += p.vy; p.life--;
+                particles.push({ x: p.x, y: p.y, vx:0, vy:0, life:5, color: p.enemy?'#ff8888':(player.weapon?.color||'#fff'), size:4 });
+                if (p.enemy) {
+                    if (Math.hypot(player.x-p.x, player.y-p.y) < 25) {
+                        player.hp -= p.dmg; player.hitFlash = 15; flashDamage(); shakeScreen(8);
+                        p.life = 0;
+                    }
+                } else {
+                    let hit = false;
+                    for (let en of enemies) {
+                        if (Math.hypot(en.x-p.x, en.y-p.y) < 30*player.sizeMult) {
+                            let dmg = p.dmg * player.dmgMult;
+                            if (player.critChance && Math.random() < player.critChance) dmg *= 2;
+                            en.hp -= dmg;
+                            addParticles(p.x, p.y, '#ffdd44', 6);
+                            if (player.hasNova) {
+                                for (let en2 of enemies)
+                                    if (Math.hypot(en2.x-p.x, en2.y-p.y) < 60) en2.hp -= dmg*0.3;
+                                addParticles(p.x, p.y, '#ffaa00', 15);
+                            }
+                            hit = true; break;
+                        }
+                    }
+                    if (hit) p.life = 0;
+                }
+                if (p.life<=0 || p.x<0 || p.x>canvas.width || p.y<0 || p.y>canvas.height) projectiles.splice(i,1);
+            }
+
+            // Partículas
+            for (let i=particles.length-1; i>=0; i--) {
+                const p = particles[i]; p.x += p.vx; p.y += p.vy; p.life--;
+                if (p.life<=0) particles.splice(i,1);
+            }
+
+            // HUD
+            document.getElementById('hp-fill').style.width = Math.max(0,(player.hp/player.maxHp)*100)+'%';
+            document.getElementById('xp-fill').style.width = (player.xp/player.next)*100+'%';
+            document.getElementById('hp-txt').innerText = `${Math.floor(player.hp)}/${player.maxHp}`;
+            document.getElementById('lvl-txt').innerText = player.lvl;
+
+            if (player.hp <= 0) { 
+                alert(`Game Over! Você sobreviveu até a Wave ${wave}`); 
+                showScreen('main'); 
+                enemies=[]; projectiles=[]; player.minions=[]; 
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = '#050508'; ctx.fillRect(0,0,canvas.width,canvas.height);
+            if (state === 'playing') {
+                const entities = [...enemies.map(e=>({...e,type:'enemy'})), ...player.minions.map(m=>({...m,type:'minion'})), {...player,type:'player'}];
+                entities.sort((a,b)=>(a.y||0)-(b.y||0));
+                for (let e of entities) {
+                    if (e.type==='player') drawPlayer(ctx, player);
+                    else if (e.type==='enemy') {
+                        const size = e.isBoss ? 2.0 : 1.0;
+                        ctx.fillStyle = e.isBoss ? '#8b0000' : '#333';
+                        ctx.fillRect(e.x-12*size, e.y-20*size, 24*size, 20*size);
+                        ctx.fillStyle = '#e63946';
+                        ctx.fillRect(e.x-15*size, e.y-30*size, 30*size*(e.hp/e.maxHp), 4*size);
+                        if (e.isBoss) {
+                            ctx.fillStyle = '#ffaa00'; ctx.font = 'bold 16px monospace';
+                            ctx.fillText('👑', e.x-15, e.y-40);
+                        }
+                    } else {
+                        ctx.fillStyle='#aaccff'; ctx.globalAlpha=0.7; ctx.fillRect(e.x-8, e.y-12, 16, 12); ctx.globalAlpha=1;
+                    }
+                }
+                for (let p of projectiles) {
+                    ctx.fillStyle = p.enemy ? '#ff8888' : (player.weapon?.color || '#fff');
+                    ctx.shadowColor = p.enemy ? '#ff0000' : player.weapon?.color; ctx.shadowBlur = 15;
+                    ctx.beginPath(); ctx.arc(p.x,p.y, p.enemy?6:8*player.sizeMult,0,Math.PI*2); ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+                for (let p of particles) {
+                    ctx.fillStyle = p.color; ctx.globalAlpha = p.life/30;
+                    ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+            }
+            update(); requestAnimationFrame(draw);
+        }
+
+        // ========== CONTROLES E HABILIDADES ==========
+        const keys = {};
+        window.addEventListener('keydown', e => {
+            keys[e.key.toLowerCase()] = true;
+            if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) e.preventDefault();
+            // Teclas 1-4 para skills
+            if (e.key >= '1' && e.key <= '4' && state === 'playing') useSkill(parseInt(e.key)-1);
+            updateInput();
+        });
+        window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; updateInput(); });
+        function updateInput() {
+            player.input.x = (keys['d']||keys['arrowright']?1:0) - (keys['a']||keys['arrowleft']?1:0);
+            player.input.y = (keys['s']||keys['arrowdown']?1:0) - (keys['w']||keys['arrowup']?1:0);
+        }
+
+        // Cooldowns das skills
+        let skillCooldowns = {};
+        function useSkill(index) {
+            const spellName = player.spells[index];
+            if (!spellName) return;
+            const now = Date.now();
+            const cdKey = spellName;
+            if (skillCooldowns[cdKey] && now < skillCooldowns[cdKey]) return;
+            const spell = DATA.skills.find(s => s.n.toLowerCase().includes(spellName) || spellName === 'summon' && s.n.includes('Invocar'));
+            if (!spell) return;
+            // Executa efeito
+            switch(spellName) {
+                case 'cleave': // Golpe Poderoso
+                    for (let en of enemies) if (Math.hypot(en.x-player.x, en.y-player.y) < 70) en.hp -= 40 * player.dmgMult;
+                    addParticles(player.x, player.y, '#fff', 20); break;
+                case 'fireball': // Bola de Fogo
+                    const angle = Math.atan2(player.input.y || 1, player.input.x || 0);
+                    projectiles.push({ x:player.x, y:player.y, vx:Math.cos(angle)*7, vy:Math.sin(angle)*7, life:40, dmg:60, aoe:80 });
+                    break;
+                case 'scorchingray': // Raio Ardente
+                    for (let en of enemies) if (Math.hypot(en.x-player.x, en.y-player.y) < 150) en.hp -= 25 * player.dmgMult;
+                    break;
+                case 'shield': player.shield = 100; setTimeout(()=>player.shield=0, 3000); break;
+                case 'shadowstep': 
+                    player.x += player.input.x*100 || 50; player.y += player.input.y*100 || 50; break;
+                case 'summon':
+                    if (player.minions.length < 5) player.minions.push({ x:player.x, y:player.y, life:800, dmg:20 }); break;
+                case 'fanofknives':
+                    for (let i=0; i<5; i++) {
+                        const a = Math.atan2(player.input.y, player.input.x) + (i-2)*0.3;
+                        projectiles.push({ x:player.x, y:player.y, vx:Math.cos(a)*8, vy:Math.sin(a)*8, life:25, dmg:15 });
+                    } break;
+                case 'heal': player.hp = Math.min(player.maxHp, player.hp+30); break;
+            }
+            skillCooldowns[cdKey] = now + (spell.cd || 3) * 1000;
+        }
+
+        // Joystick mobile
+        const jb = document.getElementById('joystick-base'), js = document.getElementById('joystick-stick');
+        if (isMobile) {
+            jb.addEventListener('touchstart', handleJoystick); jb.addEventListener('touchmove', handleJoystick);
+            jb.addEventListener('touchend', resetJoystick);
+        }
+        function handleJoystick(e) {
+            e.preventDefault(); jb.classList.add('active');
+            const touch = e.touches[0], rect = jb.getBoundingClientRect();
+            const dx = touch.clientX - (rect.left+rect.width/2), dy = touch.clientY - (rect.top+rect.height/2);
+            const dist = Math.min(30, Math.hypot(dx,dy)), angle = Math.atan2(dy,dx);
+            js.style.transform = `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`;
+            player.input.x = Math.cos(angle)*(dist/30); player.input.y = Math.sin(angle)*(dist/30);
+        }
+        function resetJoystick(e) {
+            e.preventDefault(); jb.classList.remove('active');
+            js.style.transform = 'translate(0,0)'; player.input.x = player.input.y = 0;
+        }
+
+        function handleAttack(e) {
+            if (state !== 'playing') return; e.preventDefault();
+            let cx, cy;
+            if (e.touches) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+            else { cx = e.clientX; cy = e.clientY; }
+            const angle = Math.atan2(cy - player.y, cx - player.x);
+            const w = player.weapon; if (!w) return;
+            const baseDmg = w.dmg;
+            if (w.type === 'swing') {
+                projectiles.push({ x:player.x, y:player.y, vx:Math.cos(angle)*4, vy:Math.sin(angle)*4, life:12, dmg:baseDmg });
+            } else if (w.type === 'multi') {
+                for (let i=-0.2; i<=0.2; i+=0.2)
+                    projectiles.push({ x:player.x, y:player.y, vx:Math.cos(angle+i)*8, vy:Math.sin(angle+i)*8, life:20, dmg:baseDmg });
+            } else if (w.type === 'necro') {
+                projectiles.push({ x:player.x, y:player.y, vx:Math.cos(angle)*6, vy:Math.sin(angle)*6, life:25, dmg:baseDmg });
+            }
+            addParticles(player.x, player.y, w.color, 5);
+        }
+
+        canvas.addEventListener('mousedown', handleAttack);
+        canvas.addEventListener('touchstart', handleAttack, {passive: false});
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+        draw();
+        showScreen('main');
+        document.getElementById('control-hint').innerHTML = isMobile ? 'Toque para atacar' : 'WASD: Mover | Clique: Atacar | 1-4: Skills';
+    })();
+</script>
+</body>
+</html>
